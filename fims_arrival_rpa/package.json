@@ -1,0 +1,13 @@
+{
+  "devDependencies": {
+    "jszip": "^3.10.2",
+    "sax": "^1.6.1"
+  },
+  "name": "fims-arrival-rpa",
+  "version": "1.0.5",
+  "private": true,
+  "description": "FIMS 입국신고 자동화 Chrome 확장프로그램 (Excel판)",
+  "scripts": {
+    "test": "node tests/test-content.mjs && node tests/test-service-worker.mjs && node tests/test-dialog-bridge.mjs && node tests/test-arrival-regression.mjs && node tests/test-package.mjs && node tests/test-workbook-roundtrip.mjs"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "FIMS 입국신고 자동화 (Excel)",
+  "version": "1.0.5",
+  "description": "엑셀 명단으로 유학생 기본정보를 조회하고 학번·입국여부·입학일자를 저장한 뒤 입국일자를 검증합니다.",
+  "minimum_chrome_version": "111",
+  "permissions": [
+    "tabs",
+    "cookies",
+    "scripting",
+    "webNavigation",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.hikorea.go.kr/*",
+    "https://fims.hikorea.go.kr/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_title": "FIMS 입국신고 자동화 (Excel)",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.hikorea.go.kr/*",
+        "https://fims.hikorea.go.kr/*"
+      ],
+      "js": [
+        "dialog-bridge.js"
+      ],
+      "all_frames": true,
+      "match_about_blank": true,
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.hikorea.go.kr/*",
+        "https://fims.hikorea.go.kr/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "all_frames": true,
+      "match_about_blank": true,
+      "run_at": "document_idle"
+    }
+  ]
+}

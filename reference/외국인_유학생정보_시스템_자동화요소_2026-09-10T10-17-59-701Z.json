@@ -1,0 +1,1283 @@
+{
+  "schemaVersion": "2.0",
+  "generator": {
+    "name": "자동화 요소 수집기",
+    "mode": "chrome-extension"
+  },
+  "metadata": {
+    "capturedAt": "2026-09-10T10:17:59.699Z",
+    "sessionId": "session-1968291741-1789035472465",
+    "primarySite": {
+      "host": "fims.hikorea.go.kr",
+      "title": "외국인 유학생정보 시스템"
+    },
+    "suggestedFileBase": "외국인 유학생정보 시스템_자동화요소",
+    "tabCount": 1,
+    "pageCount": 1,
+    "targetCount": 10,
+    "recordedActionCount": 0,
+    "dynamicRelationshipCount": 0,
+    "hotkeys": {
+      "startRecording": "",
+      "stopRecording": "",
+      "settingsUrl": "chrome://extensions/shortcuts"
+    },
+    "valuesPolicy": "입력값 가림",
+    "collectionPolicy": "클릭·입력·선택 등 실제 조작 가능한 요소만 저장"
+  },
+  "pages": [
+    {
+      "pageStateId": "ps-1789035472903-e4851a75-4dae-4161-b652-a2d57fb6de78",
+      "capturedAt": "2026-09-10T10:17:52.903Z",
+      "reason": "panel-open",
+      "title": "외국인 유학생정보 시스템",
+      "url": "https://fims.hikorea.go.kr/isi/index.html",
+      "runtimeTabId": 1968291741,
+      "parentPageStateId": null,
+      "openedByActionId": null,
+      "targetIds": [
+        "target-0004",
+        "target-0005",
+        "target-0002",
+        "target-0008",
+        "target-0003",
+        "target-0007",
+        "target-0009",
+        "target-0006",
+        "target-0001",
+        "target-0010"
+      ]
+    }
+  ],
+  "navigationGraph": {
+    "edges": []
+  },
+  "targets": [
+    {
+      "targetId": "target-0001",
+      "name": "개인정보 처리방침",
+      "kind": "click",
+      "fieldKey": "개인정보_처리방침",
+      "semantic": {
+        "role": "",
+        "label": "",
+        "sectionPath": [
+          "유학생정보시스템 로그인"
+        ],
+        "nearbyLabels": [],
+        "aliases": [
+          "개인정보 처리방침",
+          "유학생정보시스템 로그인",
+          "유학생정보시스템 로그인 개인정보 처리방침"
+        ]
+      },
+      "locator": {
+        "primary": "tr:nth-of-type(3) > td > table > tbody > tr:nth-of-type(5) > td > a > span",
+        "alternatives": [
+          "span[onclick*=\"fncPopUsrInfoPttPlcR\"]"
+        ],
+        "xpath": "/html/body/form/table[1]/tbody/tr/td/table/tbody/tr[3]/td/table/tbody/tr[3]/td/table/tbody/tr[5]/td/a/span",
+        "shadowChain": [],
+        "qualityScore": 82,
+        "qualityBasis": "inline-handler"
+      },
+      "frame": {
+        "isTop": false,
+        "url": "https://fims.hikorea.go.kr/isi/login.jsp",
+        "windowName": "bodyFrame",
+        "runtime": {
+          "tabId": 1968291741,
+          "frameId": 1218,
+          "parentFrameId": 0
+        }
+      },
+      "pageUrls": [
+        "https://fims.hikorea.go.kr/isi/index.html"
+      ],
+      "pageStateIds": [
+        "ps-1789035472903-e4851a75-4dae-4161-b652-a2d57fb6de78"
+      ],
+      "dom": {
+        "tagName": "span",
+        "id": "",
+        "name": "",
+        "inputType": "",
+        "role": ""
+      },
+      "state": {
+        "visible": true,
+        "enabled": true,
+        "disabled": false,
+        "readOnly": false,
+        "required": false,
+        "checked": null,
+        "selected": null,
+        "contentEditable": false,
+        "ariaExpanded": null,
+        "ariaSelected": null
+      },
+      "states": [
+        {
+          "visible": true,
+          "enabled": true,
+          "disabled": false,
+          "readOnly": false,
+          "required": false,
+          "checked": null,
+          "ariaExpanded": null,
+          "ariaSelected": null
+        }
+      ],
+      "constraints": {
+        "maxLength": null,
+        "minLength": null,
+        "min": null,
+        "max": null,
+        "step": null,
+        "pattern": null,
+        "inputMode": null
+      },
+      "options": null,
+      "risk": {
+        "level": "low",
+        "reason": ""
+      },
+      "provenance": {
+        "static": true,
+        "recorded": false,
+        "dynamic": false
+      },
+      "codeHints": {
+        "chromeExtension": "locate and perform click",
+        "appsScriptFieldKey": "개인정보_처리방침"
+      }
+    },
+    {
+      "targetId": "target-0002",
+      "name": "비밀번호",
+      "kind": "fill",
+      "fieldKey": "userPasswd",
+      "semantic": {
+        "role": "textbox",
+        "label": "비밀번호",
+        "sectionPath": [
+          "유학생정보시스템 로그인"
+        ],
+        "nearbyLabels": [
+          "비밀번호"
+        ],
+        "aliases": [
+          "비밀번호",
+          "비밀번호 입력",
+          "유학생정보시스템 로그인",
+          "유학생정보시스템 로그인 비밀번호"
+        ]
+      },
+      "locator": {
+        "primary": "#userPasswd",
+        "alternatives": [
+          "input[name=\"userPasswd\"]",
+          "input[title=\"비밀번호 입력\"]"
+        ],
+        "xpath": "//*[@id=\"userPasswd\"]",
+        "shadowChain": [],
+        "qualityScore": 100,
+        "qualityBasis": "unique-id"
+      },
+      "frame": {
+        "isTop": false,
+        "url": "https://fims.hikorea.go.kr/isi/login.jsp",
+        "windowName": "bodyFrame",
+        "runtime": {
+          "tabId": 1968291741,
+          "frameId": 1218,
+          "parentFrameId": 0
+        }
+      },
+      "pageUrls": [
+        "https://fims.hikorea.go.kr/isi/index.html"
+      ],
+      "pageStateIds": [
+        "ps-1789035472903-e4851a75-4dae-4161-b652-a2d57fb6de78"
+      ],
+      "dom": {
+        "tagName": "input",
+        "id": "userPasswd",
+        "name": "userPasswd",
+        "inputType": "password",
+        "role": "textbox"
+      },
+      "state": {
+        "visible": true,
+        "enabled": true,
+        "disabled": false,
+        "readOnly": false,
+        "required": false,
+        "checked": false,
+        "selected": null,
+        "contentEditable": false,
+        "ariaExpanded": null,
+        "ariaSelected": null
+      },
+      "states": [
+        {
+          "visible": true,
+          "enabled": true,
+          "disabled": false,
+          "readOnly": false,
+          "required": false,
+          "checked": false,
+          "ariaExpanded": null,
+          "ariaSelected": null
+        }
+      ],
+      "constraints": {
+        "maxLength": 24,
+        "minLength": -1,
+        "min": null,
+        "max": null,
+        "step": null,
+        "pattern": null,
+        "inputMode": null
+      },
+      "options": null,
+      "risk": {
+        "level": "low",
+        "reason": ""
+      },
+      "provenance": {
+        "static": true,
+        "recorded": false,
+        "dynamic": false
+      },
+      "codeHints": {
+        "chromeExtension": "set value and dispatch input/change events",
+        "appsScriptFieldKey": "userPasswd"
+      }
+    },
+    {
+      "targetId": "target-0003",
+      "name": "비밀번호찾기(새창열림)",
+      "kind": "click",
+      "fieldKey": "비밀번호찾기_새창열림",
+      "semantic": {
+        "role": "link",
+        "label": "",
+        "sectionPath": [
+          "유학생정보시스템 로그인"
+        ],
+        "nearbyLabels": [],
+        "aliases": [
+          "비밀번호찾기(새창열림)",
+          "비밀번호찾기",
+          "유학생정보시스템 로그인",
+          "유학생정보시스템 로그인 비밀번호찾기(새창열림)",
+          "비밀번호찾기(새창열림) 버튼"
+        ]
+      },
+      "locator": {
+        "primary": "a[title=\"비밀번호찾기(새창열림)\"]",
+        "alternatives": [
+          "a[onclick*=\"findIsiMembPasswd\"]"
+        ],
+        "xpath": "/html/body/form/table[1]/tbody/tr/td/table/tbody/tr[3]/td/table/tbody/tr[3]/td/table/tbody/tr[2]/td/a",
+        "shadowChain": [],
+        "qualityScore": 82,
+        "qualityBasis": "inline-handler"
+      },
+      "frame": {
+        "isTop": false,
+        "url": "https://fims.hikorea.go.kr/isi/login.jsp",
+        "windowName": "bodyFrame",
+        "runtime": {
+          "tabId": 1968291741,
+          "frameId": 1218,
+          "parentFrameId": 0
+        }
+      },
+      "pageUrls": [
+        "https://fims.hikorea.go.kr/isi/index.html"
+      ],
+      "pageStateIds": [
+        "ps-1789035472903-e4851a75-4dae-4161-b652-a2d57fb6de78"
+      ],
+      "dom": {
+        "tagName": "a",
+        "id": "",
+        "name": "",
+        "inputType": "",
+        "role": "link"
+      },
+      "state": {
+        "visible": true,
+        "enabled": true,
+        "disabled": false,
+        "readOnly": false,
+        "required": false,
+        "checked": null,
+        "selected": null,
+        "contentEditable": false,
+        "ariaExpanded": null,
+        "ariaSelected": null
+      },
+      "states": [
+        {
+          "visible": true,
+          "enabled": true,
+          "disabled": false,
+          "readOnly": false,
+          "required": false,
+          "checked": null,
+          "ariaExpanded": null,
+          "ariaSelected": null
+        }
+      ],
+      "constraints": {
+        "maxLength": null,
+        "minLength": null,
+        "min": null,
+        "max": null,
+        "step": null,
+        "pattern": null,
+        "inputMode": null
+      },
+      "options": null,
+      "risk": {
+        "level": "low",
+        "reason": ""
+      },
+      "provenance": {
+        "static": true,
+        "recorded": false,
+        "dynamic": false
+      },
+      "codeHints": {
+        "chromeExtension": "locate and perform click",
+        "appsScriptFieldKey": "비밀번호찾기_새창열림"
+      }
+    },
+    {
+      "targetId": "target-0004",
+      "name": "사용자ID",
+      "kind": "fill",
+      "fieldKey": "userId",
+      "semantic": {
+        "role": "textbox",
+        "label": "사용자ID",
+        "sectionPath": [
+          "유학생정보시스템 로그인"
+        ],
+        "nearbyLabels": [
+          "사용자ID"
+        ],
+        "aliases": [
+          "사용자ID",
+          "유학생정보시스템 로그인",
+          "유학생정보시스템 로그인 사용자ID"
+        ]
+      },
+      "locator": {
+        "primary": "#userId",
+        "alternatives": [
+          "input[name=\"userId\"]"
+        ],
+        "xpath": "//*[@id=\"userId\"]",
+        "shadowChain": [],
+        "qualityScore": 100,
+        "qualityBasis": "unique-id"
+      },
+      "frame": {
+        "isTop": false,
+        "url": "https://fims.hikorea.go.kr/isi/login.jsp",
+        "windowName": "bodyFrame",
+        "runtime": {
+          "tabId": 1968291741,
+          "frameId": 1218,
+          "parentFrameId": 0
+        }
+      },
+      "pageUrls": [
+        "https://fims.hikorea.go.kr/isi/index.html"
+      ],
+      "pageStateIds": [
+        "ps-1789035472903-e4851a75-4dae-4161-b652-a2d57fb6de78"
+      ],
+      "dom": {
+        "tagName": "input",
+        "id": "userId",
+        "name": "userId",
+        "inputType": "text",
+        "role": "textbox"
+      },
+      "state": {
+        "visible": true,
+        "enabled": true,
+        "disabled": false,
+        "readOnly": false,
+        "required": false,
+        "checked": false,
+        "selected": null,
+        "contentEditable": false,
+        "ariaExpanded": null,
+        "ariaSelected": null
+      },
+      "states": [
+        {
+          "visible": true,
+          "enabled": true,
+          "disabled": false,
+          "readOnly": false,
+          "required": false,
+          "checked": false,
+          "ariaExpanded": null,
+          "ariaSelected": null
+        }
+      ],
+      "constraints": {
+        "maxLength": 12,
+        "minLength": -1,
+        "min": null,
+        "max": null,
+        "step": null,
+        "pattern": null,
+        "inputMode": null
+      },
+      "options": null,
+      "risk": {
+        "level": "low",
+        "reason": ""
+      },
+      "provenance": {
+        "static": true,
+        "recorded": false,
+        "dynamic": false
+      },
+      "codeHints": {
+        "chromeExtension": "set value and dispatch input/change events",
+        "appsScriptFieldKey": "userId"
+      }
+    },
+    {
+      "targetId": "target-0005",
+      "name": "사용자ID",
+      "kind": "fill",
+      "fieldKey": "Button2",
+      "semantic": {
+        "role": "button",
+        "label": "사용자ID",
+        "sectionPath": [
+          "유학생정보시스템 로그인"
+        ],
+        "nearbyLabels": [
+          "사용자ID"
+        ],
+        "aliases": [
+          "사용자ID",
+          "유학생정보시스템 로그인",
+          "유학생정보시스템 로그인 사용자ID",
+          "사용자ID 버튼"
+        ]
+      },
+      "locator": {
+        "primary": "input[name=\"Button2\"]",
+        "alternatives": [
+          "input[onclick*=\"membLogin\"]"
+        ],
+        "xpath": "/html/body/form/table[1]/tbody/tr/td/table/tbody/tr[3]/td/table/tbody/tr[1]/td[2]/input",
+        "shadowChain": [],
+        "qualityScore": 90,
+        "qualityBasis": "name"
+      },
+      "frame": {
+        "isTop": false,
+        "url": "https://fims.hikorea.go.kr/isi/login.jsp",
+        "windowName": "bodyFrame",
+        "runtime": {
+          "tabId": 1968291741,
+          "frameId": 1218,
+          "parentFrameId": 0
+        }
+      },
+      "pageUrls": [
+        "https://fims.hikorea.go.kr/isi/index.html"
+      ],
+      "pageStateIds": [
+        "ps-1789035472903-e4851a75-4dae-4161-b652-a2d57fb6de78"
+      ],
+      "dom": {
+        "tagName": "input",
+        "id": "",
+        "name": "Button2",
+        "inputType": "button",
+        "role": "button"
+      },
+      "state": {
+        "visible": true,
+        "enabled": true,
+        "disabled": false,
+        "readOnly": false,
+        "required": false,
+        "checked": false,
+        "selected": null,
+        "contentEditable": false,
+        "ariaExpanded": null,
+        "ariaSelected": null
+      },
+      "states": [
+        {
+          "visible": true,
+          "enabled": true,
+          "disabled": false,
+          "readOnly": false,
+          "required": false,
+          "checked": false,
+          "ariaExpanded": null,
+          "ariaSelected": null
+        }
+      ],
+      "constraints": {
+        "maxLength": -1,
+        "minLength": -1,
+        "min": null,
+        "max": null,
+        "step": null,
+        "pattern": null,
+        "inputMode": null
+      },
+      "options": null,
+      "risk": {
+        "level": "low",
+        "reason": ""
+      },
+      "provenance": {
+        "static": true,
+        "recorded": false,
+        "dynamic": false
+      },
+      "codeHints": {
+        "chromeExtension": "set value and dispatch input/change events",
+        "appsScriptFieldKey": "Button2"
+      }
+    },
+    {
+      "targetId": "target-0006",
+      "name": "새창열림",
+      "kind": "click",
+      "fieldKey": "새창열림",
+      "semantic": {
+        "role": "link",
+        "label": "",
+        "sectionPath": [
+          "유학생정보시스템 로그인"
+        ],
+        "nearbyLabels": [],
+        "aliases": [
+          "새창열림",
+          "개인정보 처리방침",
+          "유학생정보시스템 로그인",
+          "유학생정보시스템 로그인 새창열림",
+          "새창열림 버튼"
+        ]
+      },
+      "locator": {
+        "primary": "a[title=\"새창열림\"]",
+        "alternatives": [],
+        "xpath": "/html/body/form/table[1]/tbody/tr/td/table/tbody/tr[3]/td/table/tbody/tr[3]/td/table/tbody/tr[5]/td/a",
+        "shadowChain": [],
+        "qualityScore": 78,
+        "qualityBasis": "title"
+      },
+      "frame": {
+        "isTop": false,
+        "url": "https://fims.hikorea.go.kr/isi/login.jsp",
+        "windowName": "bodyFrame",
+        "runtime": {
+          "tabId": 1968291741,
+          "frameId": 1218,
+          "parentFrameId": 0
+        }
+      },
+      "pageUrls": [
+        "https://fims.hikorea.go.kr/isi/index.html"
+      ],
+      "pageStateIds": [
+        "ps-1789035472903-e4851a75-4dae-4161-b652-a2d57fb6de78"
+      ],
+      "dom": {
+        "tagName": "a",
+        "id": "",
+        "name": "",
+        "inputType": "",
+        "role": "link"
+      },
+      "state": {
+        "visible": true,
+        "enabled": true,
+        "disabled": false,
+        "readOnly": false,
+        "required": false,
+        "checked": null,
+        "selected": null,
+        "contentEditable": false,
+        "ariaExpanded": null,
+        "ariaSelected": null
+      },
+      "states": [
+        {
+          "visible": true,
+          "enabled": true,
+          "disabled": false,
+          "readOnly": false,
+          "required": false,
+          "checked": null,
+          "ariaExpanded": null,
+          "ariaSelected": null
+        }
+      ],
+      "constraints": {
+        "maxLength": null,
+        "minLength": null,
+        "min": null,
+        "max": null,
+        "step": null,
+        "pattern": null,
+        "inputMode": null
+      },
+      "options": null,
+      "risk": {
+        "level": "low",
+        "reason": ""
+      },
+      "provenance": {
+        "static": true,
+        "recorded": false,
+        "dynamic": false
+      },
+      "codeHints": {
+        "chromeExtension": "locate and perform click",
+        "appsScriptFieldKey": "새창열림"
+      }
+    },
+    {
+      "targetId": "target-0007",
+      "name": "신규유학생담당자지정신청(새창열림)",
+      "kind": "click",
+      "fieldKey": "신규유학생담당자지정신청_새창열림",
+      "semantic": {
+        "role": "link",
+        "label": "",
+        "sectionPath": [
+          "유학생정보시스템 로그인"
+        ],
+        "nearbyLabels": [],
+        "aliases": [
+          "신규유학생담당자지정신청(새창열림)",
+          "신규유학생담당자지정신청",
+          "유학생정보시스템 로그인",
+          "유학생정보시스템 로그인 신규유학생담당자지정신청(새창열림)",
+          "신규유학생담당자지정신청(새창열림) 버튼"
+        ]
+      },
+      "locator": {
+        "primary": "a[title=\"신규유학생담당자지정신청(새창열림)\"]",
+        "alternatives": [
+          "a[onclick*=\"fncPopOpen\"]"
+        ],
+        "xpath": "/html/body/form/table[1]/tbody/tr/td/table/tbody/tr[3]/td/table/tbody/tr[3]/td/table/tbody/tr[3]/td/a",
+        "shadowChain": [],
+        "qualityScore": 82,
+        "qualityBasis": "inline-handler"
+      },
+      "frame": {
+        "isTop": false,
+        "url": "https://fims.hikorea.go.kr/isi/login.jsp",
+        "windowName": "bodyFrame",
+        "runtime": {
+          "tabId": 1968291741,
+          "frameId": 1218,
+          "parentFrameId": 0
+        }
+      },
+      "pageUrls": [
+        "https://fims.hikorea.go.kr/isi/index.html"
+      ],
+      "pageStateIds": [
+        "ps-1789035472903-e4851a75-4dae-4161-b652-a2d57fb6de78"
+      ],
+      "dom": {
+        "tagName": "a",
+        "id": "",
+        "name": "",
+        "inputType": "",
+        "role": "link"
+      },
+      "state": {
+        "visible": true,
+        "enabled": true,
+        "disabled": false,
+        "readOnly": false,
+        "required": false,
+        "checked": null,
+        "selected": null,
+        "contentEditable": false,
+        "ariaExpanded": null,
+        "ariaSelected": null
+      },
+      "states": [
+        {
+          "visible": true,
+          "enabled": true,
+          "disabled": false,
+          "readOnly": false,
+          "required": false,
+          "checked": null,
+          "ariaExpanded": null,
+          "ariaSelected": null
+        }
+      ],
+      "constraints": {
+        "maxLength": null,
+        "minLength": null,
+        "min": null,
+        "max": null,
+        "step": null,
+        "pattern": null,
+        "inputMode": null
+      },
+      "options": null,
+      "risk": {
+        "level": "low",
+        "reason": ""
+      },
+      "provenance": {
+        "static": true,
+        "recorded": false,
+        "dynamic": false
+      },
+      "codeHints": {
+        "chromeExtension": "locate and perform click",
+        "appsScriptFieldKey": "신규유학생담당자지정신청_새창열림"
+      }
+    },
+    {
+      "targetId": "target-0008",
+      "name": "아이디찾기(새창열림)",
+      "kind": "click",
+      "fieldKey": "아이디찾기_새창열림",
+      "semantic": {
+        "role": "link",
+        "label": "",
+        "sectionPath": [
+          "유학생정보시스템 로그인"
+        ],
+        "nearbyLabels": [],
+        "aliases": [
+          "아이디찾기(새창열림)",
+          "아이디찾기",
+          "유학생정보시스템 로그인",
+          "유학생정보시스템 로그인 아이디찾기(새창열림)",
+          "아이디찾기(새창열림) 버튼"
+        ]
+      },
+      "locator": {
+        "primary": "a[title=\"아이디찾기(새창열림)\"]",
+        "alternatives": [
+          "a[onclick*=\"findIsiMembId\"]"
+        ],
+        "xpath": "/html/body/form/table[1]/tbody/tr/td/table/tbody/tr[3]/td/table/tbody/tr[3]/td/table/tbody/tr[1]/td/a",
+        "shadowChain": [],
+        "qualityScore": 82,
+        "qualityBasis": "inline-handler"
+      },
+      "frame": {
+        "isTop": false,
+        "url": "https://fims.hikorea.go.kr/isi/login.jsp",
+        "windowName": "bodyFrame",
+        "runtime": {
+          "tabId": 1968291741,
+          "frameId": 1218,
+          "parentFrameId": 0
+        }
+      },
+      "pageUrls": [
+        "https://fims.hikorea.go.kr/isi/index.html"
+      ],
+      "pageStateIds": [
+        "ps-1789035472903-e4851a75-4dae-4161-b652-a2d57fb6de78"
+      ],
+      "dom": {
+        "tagName": "a",
+        "id": "",
+        "name": "",
+        "inputType": "",
+        "role": "link"
+      },
+      "state": {
+        "visible": true,
+        "enabled": true,
+        "disabled": false,
+        "readOnly": false,
+        "required": false,
+        "checked": null,
+        "selected": null,
+        "contentEditable": false,
+        "ariaExpanded": null,
+        "ariaSelected": null
+      },
+      "states": [
+        {
+          "visible": true,
+          "enabled": true,
+          "disabled": false,
+          "readOnly": false,
+          "required": false,
+          "checked": null,
+          "ariaExpanded": null,
+          "ariaSelected": null
+        }
+      ],
+      "constraints": {
+        "maxLength": null,
+        "minLength": null,
+        "min": null,
+        "max": null,
+        "step": null,
+        "pattern": null,
+        "inputMode": null
+      },
+      "options": null,
+      "risk": {
+        "level": "low",
+        "reason": ""
+      },
+      "provenance": {
+        "static": true,
+        "recorded": false,
+        "dynamic": false
+      },
+      "codeHints": {
+        "chromeExtension": "locate and perform click",
+        "appsScriptFieldKey": "아이디찾기_새창열림"
+      }
+    },
+    {
+      "targetId": "target-0009",
+      "name": "원격접속(새창열림)",
+      "kind": "click",
+      "fieldKey": "원격접속_새창열림",
+      "semantic": {
+        "role": "link",
+        "label": "",
+        "sectionPath": [
+          "유학생정보시스템 로그인"
+        ],
+        "nearbyLabels": [],
+        "aliases": [
+          "원격접속(새창열림)",
+          "원격접속",
+          "유학생정보시스템 로그인",
+          "유학생정보시스템 로그인 원격접속(새창열림)",
+          "원격접속(새창열림) 버튼"
+        ]
+      },
+      "locator": {
+        "primary": "a[title=\"원격접속(새창열림)\"]",
+        "alternatives": [
+          "a[onclick*=\"fncRemoteCall\"]"
+        ],
+        "xpath": "/html/body/form/table[1]/tbody/tr/td/table/tbody/tr[3]/td/table/tbody/tr[3]/td/table/tbody/tr[4]/td/a",
+        "shadowChain": [],
+        "qualityScore": 82,
+        "qualityBasis": "inline-handler"
+      },
+      "frame": {
+        "isTop": false,
+        "url": "https://fims.hikorea.go.kr/isi/login.jsp",
+        "windowName": "bodyFrame",
+        "runtime": {
+          "tabId": 1968291741,
+          "frameId": 1218,
+          "parentFrameId": 0
+        }
+      },
+      "pageUrls": [
+        "https://fims.hikorea.go.kr/isi/index.html"
+      ],
+      "pageStateIds": [
+        "ps-1789035472903-e4851a75-4dae-4161-b652-a2d57fb6de78"
+      ],
+      "dom": {
+        "tagName": "a",
+        "id": "",
+        "name": "",
+        "inputType": "",
+        "role": "link"
+      },
+      "state": {
+        "visible": true,
+        "enabled": true,
+        "disabled": false,
+        "readOnly": false,
+        "required": false,
+        "checked": null,
+        "selected": null,
+        "contentEditable": false,
+        "ariaExpanded": null,
+        "ariaSelected": null
+      },
+      "states": [
+        {
+          "visible": true,
+          "enabled": true,
+          "disabled": false,
+          "readOnly": false,
+          "required": false,
+          "checked": null,
+          "ariaExpanded": null,
+          "ariaSelected": null
+        }
+      ],
+      "constraints": {
+        "maxLength": null,
+        "minLength": null,
+        "min": null,
+        "max": null,
+        "step": null,
+        "pattern": null,
+        "inputMode": null
+      },
+      "options": null,
+      "risk": {
+        "level": "low",
+        "reason": ""
+      },
+      "provenance": {
+        "static": true,
+        "recorded": false,
+        "dynamic": false
+      },
+      "codeHints": {
+        "chromeExtension": "locate and perform click",
+        "appsScriptFieldKey": "원격접속_새창열림"
+      }
+    },
+    {
+      "targetId": "target-0010",
+      "name": "정부3.0(새창열림)",
+      "kind": "click",
+      "fieldKey": "정부3_0_새창열림",
+      "semantic": {
+        "role": "link",
+        "label": "",
+        "sectionPath": [],
+        "nearbyLabels": [],
+        "aliases": [
+          "정부3.0(새창열림)",
+          "정부3.0(새창열림) 버튼"
+        ]
+      },
+      "locator": {
+        "primary": "a[title=\"정부3.0(새창열림)\"]",
+        "alternatives": [
+          "a[onclick*=\"fncgov30Call\"]"
+        ],
+        "xpath": "/html/body/form/table[2]/tbody/tr/td[1]/a",
+        "shadowChain": [],
+        "qualityScore": 82,
+        "qualityBasis": "inline-handler"
+      },
+      "frame": {
+        "isTop": false,
+        "url": "https://fims.hikorea.go.kr/isi/login.jsp",
+        "windowName": "bodyFrame",
+        "runtime": {
+          "tabId": 1968291741,
+          "frameId": 1218,
+          "parentFrameId": 0
+        }
+      },
+      "pageUrls": [
+        "https://fims.hikorea.go.kr/isi/index.html"
+      ],
+      "pageStateIds": [
+        "ps-1789035472903-e4851a75-4dae-4161-b652-a2d57fb6de78"
+      ],
+      "dom": {
+        "tagName": "a",
+        "id": "",
+        "name": "",
+        "inputType": "",
+        "role": "link"
+      },
+      "state": {
+        "visible": true,
+        "enabled": true,
+        "disabled": false,
+        "readOnly": false,
+        "required": false,
+        "checked": null,
+        "selected": null,
+        "contentEditable": false,
+        "ariaExpanded": null,
+        "ariaSelected": null
+      },
+      "states": [
+        {
+          "visible": true,
+          "enabled": true,
+          "disabled": false,
+          "readOnly": false,
+          "required": false,
+          "checked": null,
+          "ariaExpanded": null,
+          "ariaSelected": null
+        }
+      ],
+      "constraints": {
+        "maxLength": null,
+        "minLength": null,
+        "min": null,
+        "max": null,
+        "step": null,
+        "pattern": null,
+        "inputMode": null
+      },
+      "options": null,
+      "risk": {
+        "level": "low",
+        "reason": ""
+      },
+      "provenance": {
+        "static": true,
+        "recorded": false,
+        "dynamic": false
+      },
+      "codeHints": {
+        "chromeExtension": "locate and perform click",
+        "appsScriptFieldKey": "정부3_0_새창열림"
+      }
+    }
+  ],
+  "workflow": [],
+  "dynamicRelationships": [],
+  "codeGeneration": {
+    "optimizedFor": [
+      "chrome-extension",
+      "google-apps-script"
+    ],
+    "chromeExtension": {
+      "executionLayer": "content script with stable selectors and minimal frame routing metadata",
+      "targetCount": 10,
+      "recordedSteps": []
+    },
+    "googleAppsScript": {
+      "role": "Google Sheets data source and Apps Script Web App/API layer",
+      "limitation": "Apps Script는 임의 웹사이트 DOM을 직접 조작하지 않으며 Chrome 확장프로그램이 브라우저 동작을 수행합니다.",
+      "suggestedSheetHeaders": [
+        "실행",
+        "작업구분",
+        "비밀번호",
+        "사용자ID",
+        "처리상태",
+        "처리메시지",
+        "처리일시"
+      ],
+      "fields": [
+        {
+          "fieldKey": "userPasswd",
+          "suggestedSheetColumn": "비밀번호",
+          "targetId": "target-0002",
+          "dataType": "string",
+          "required": false,
+          "sensitive": false,
+          "maxLength": 24,
+          "optionValues": null
+        },
+        {
+          "fieldKey": "userId",
+          "suggestedSheetColumn": "사용자ID",
+          "targetId": "target-0004",
+          "dataType": "string",
+          "required": false,
+          "sensitive": false,
+          "maxLength": 12,
+          "optionValues": null
+        },
+        {
+          "fieldKey": "Button2",
+          "suggestedSheetColumn": "사용자ID",
+          "targetId": "target-0005",
+          "dataType": "string",
+          "required": false,
+          "sensitive": false,
+          "maxLength": -1,
+          "optionValues": null
+        }
+      ],
+      "webAppContract": {
+        "read": {
+          "action": "getJobs",
+          "returns": "pending rows and field values"
+        },
+        "update": {
+          "action": "updateResult",
+          "accepts": "row identifier, status, message, outputs"
+        }
+      }
+    }
+  },
+  "semanticIndex": {
+    "개인정보 처리방침": [
+      "target-0001",
+      "target-0006"
+    ],
+    "개인정보": [
+      "target-0001",
+      "target-0006"
+    ],
+    "처리방침": [
+      "target-0001",
+      "target-0006"
+    ],
+    "유학생정보시스템 로그인": [
+      "target-0001",
+      "target-0002",
+      "target-0003",
+      "target-0004",
+      "target-0005",
+      "target-0006",
+      "target-0007",
+      "target-0008",
+      "target-0009"
+    ],
+    "유학생정보시스템": [
+      "target-0001",
+      "target-0002",
+      "target-0003",
+      "target-0004",
+      "target-0005",
+      "target-0006",
+      "target-0007",
+      "target-0008",
+      "target-0009"
+    ],
+    "로그인": [
+      "target-0001",
+      "target-0002",
+      "target-0003",
+      "target-0004",
+      "target-0005",
+      "target-0006",
+      "target-0007",
+      "target-0008",
+      "target-0009"
+    ],
+    "유학생정보시스템 로그인 개인정보 처리방침": [
+      "target-0001"
+    ],
+    "비밀번호": [
+      "target-0002"
+    ],
+    "비밀번호 입력": [
+      "target-0002"
+    ],
+    "입력": [
+      "target-0002"
+    ],
+    "유학생정보시스템 로그인 비밀번호": [
+      "target-0002"
+    ],
+    "비밀번호찾기(새창열림)": [
+      "target-0003"
+    ],
+    "비밀번호찾기": [
+      "target-0003"
+    ],
+    "새창열림": [
+      "target-0003",
+      "target-0006",
+      "target-0007",
+      "target-0008",
+      "target-0009",
+      "target-0010"
+    ],
+    "유학생정보시스템 로그인 비밀번호찾기(새창열림)": [
+      "target-0003"
+    ],
+    "비밀번호찾기(새창열림) 버튼": [
+      "target-0003"
+    ],
+    "버튼": [
+      "target-0003",
+      "target-0005",
+      "target-0006",
+      "target-0007",
+      "target-0008",
+      "target-0009",
+      "target-0010"
+    ],
+    "사용자ID": [
+      "target-0004",
+      "target-0005"
+    ],
+    "유학생정보시스템 로그인 사용자ID": [
+      "target-0004",
+      "target-0005"
+    ],
+    "사용자ID 버튼": [
+      "target-0005"
+    ],
+    "유학생정보시스템 로그인 새창열림": [
+      "target-0006"
+    ],
+    "새창열림 버튼": [
+      "target-0006"
+    ],
+    "신규유학생담당자지정신청(새창열림)": [
+      "target-0007"
+    ],
+    "신규유학생담당자지정신청": [
+      "target-0007"
+    ],
+    "유학생정보시스템 로그인 신규유학생담당자지정신청(새창열림)": [
+      "target-0007"
+    ],
+    "신규유학생담당자지정신청(새창열림) 버튼": [
+      "target-0007"
+    ],
+    "아이디찾기(새창열림)": [
+      "target-0008"
+    ],
+    "아이디찾기": [
+      "target-0008"
+    ],
+    "유학생정보시스템 로그인 아이디찾기(새창열림)": [
+      "target-0008"
+    ],
+    "아이디찾기(새창열림) 버튼": [
+      "target-0008"
+    ],
+    "원격접속(새창열림)": [
+      "target-0009"
+    ],
+    "원격접속": [
+      "target-0009"
+    ],
+    "유학생정보시스템 로그인 원격접속(새창열림)": [
+      "target-0009"
+    ],
+    "원격접속(새창열림) 버튼": [
+      "target-0009"
+    ],
+    "정부3.0(새창열림)": [
+      "target-0010"
+    ],
+    "정부3.0": [
+      "target-0010"
+    ],
+    "정부3.0(새창열림) 버튼": [
+      "target-0010"
+    ]
+  },
+  "warnings": []
+}

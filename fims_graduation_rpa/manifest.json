@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "FIMS 졸업신고 자동화 (Excel)",
+  "version": "3.0.1",
+  "description": "엑셀 명단으로 FIMS 졸업신고 대상 조회, 선택, 보내기, 일괄입력, 최종 처리 및 결과 엑셀 저장을 수행합니다.",
+  "minimum_chrome_version": "111",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "webNavigation",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.hikorea.go.kr/*",
+    "https://fims.hikorea.go.kr/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "action": {
+    "default_title": "FIMS 졸업신고 자동화 (Excel)",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.hikorea.go.kr/*",
+        "https://fims.hikorea.go.kr/*"
+      ],
+      "js": ["dialog-bridge.js"],
+      "all_frames": true,
+      "match_about_blank": true,
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.hikorea.go.kr/*",
+        "https://fims.hikorea.go.kr/*"
+      ],
+      "js": ["content.js"],
+      "all_frames": true,
+      "match_about_blank": true,
+      "run_at": "document_idle"
+    }
+  ]
+}

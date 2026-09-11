@@ -1,0 +1,59 @@
+:root {
+  color-scheme: light;
+  font-family: Pretendard, "Noto Sans KR", "Segoe UI", Arial, sans-serif;
+  color: #17233b;
+  background: #f5f7fb;
+}
+
+body {
+  margin: 0;
+  width: 340px;
+}
+
+main {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 12px;
+  padding: 18px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  color: white;
+  background: #0f3f8f;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+h1 {
+  margin: 1px 0 4px;
+  font-size: 16px;
+}
+
+p {
+  margin: 0;
+  color: #5a6578;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+button {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 14px;
+  color: white;
+  background: #0f3f8f;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #0b3375;
+}

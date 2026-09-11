@@ -1,0 +1,17 @@
+# 개인정보 — 학생 명단·처리결과 엑셀은 절대 커밋하지 않습니다
+*.xlsx
+*.xls
+*.csv
+!fims_arrival_rpa/입국신고_업무파일.xlsx
+!fims_graduation_rpa/졸업신고_업무파일.xlsx
+*.log
+data/
+outputs/
+
+# 자격증명
+.env
+*.pem
+credentials*
+
+# 빌드/의존성
+node_modules/
