@@ -509,3 +509,66 @@ const saveComplete = await vm.runInContext(
   saveScenario({ alerts: ['성공적으로 저장되었습니다.[1건]'], arrivalConfirmed: true, arrivalDate: '2026.08.24' }), context);
 assert.equal(saveComplete.code, 'COMPLETED');
 assert.equal(saveComplete.arrivalDate, '2026.08.24');
+
+// ── 1.2.1: 수정대상자로 분류되지 않은 학생은 체크박스가 켜진 상태에서 조회되지 않는다.
+// 못 찾으면 체크를 풀고(전체 재학생) 한 번 더 찾아야 한다.
+const recheckWidens = await vm.runInContext(`(async () => {
+  const searches = [];
+  let call = 0;
+  setDialogModeAllFrames = async () => ({armed:1,armedFrameIds:[90]});
+  clearDialogMode = async () => {};
+  getFrames = async () => ([{frameId:90,parentFrameId:-1,url:'x'}]);
+  ensureContentScript = async () => true;
+  openModiObjScreen = async () => ({frameId:90,state:{hasModiObjSearchForm:true}});
+  waitForFrame = async () => ({frameId:90,state:{hasModiObjSearchForm:true}});
+  waitModiObjResult = async () => {
+    call += 1;
+    // 첫 조회(수정대상자만)는 못 찾고, 두 번째(전체 재학생)에서 찾는다
+    return call === 1
+      ? ({frame:{frameId:90},data:{state:'NOT_FOUND',matchCount:0,rowCount:0}})
+      : ({frame:{frameId:90},data:{state:'FOUND',matchCount:1,targetIndex:0}});
+  };
+  findIcrmPopupTab = async () => null;
+  sendAction = async (_tabId, _frameId, action, payload) => {
+    if (action === 'PREPARE_MODIOBJ_SEARCH') {
+      searches.push(payload?.options?.allStudents === true ? 'all' : 'targetOnly');
+      return {ok:true,data:{}};
+    }
+    if (action === 'OPEN_MODIOBJ_ICRM') return {ok:true,data:{rowIndex:0}};
+    return {ok:true};
+  };
+  const outcome = await recheckArrivalStudent({
+    tabId:1, student:{name:'DING, YUQIONG',birthDate:'1998.11.04',studentNo:'9625020264'}
+  });
+  return {outcome, searches};
+})()`, context);
+assert.deepEqual([...recheckWidens.searches], ['targetOnly', 'all'],
+  '못 찾으면 전체 재학생으로 한 번 더 조회해야 합니다.');
+// 두 번째 조회에서 찾았으므로 팝업 단계까지 진행한다
+assert.equal(recheckWidens.outcome.code, 'ICRM_POPUP_NOT_FOUND');
+
+// 첫 조회에서 찾으면 다시 조회하지 않는다
+const recheckNoWiden = await vm.runInContext(`(async () => {
+  const searches = [];
+  setDialogModeAllFrames = async () => ({armed:1,armedFrameIds:[91]});
+  clearDialogMode = async () => {};
+  getFrames = async () => ([{frameId:91,parentFrameId:-1,url:'x'}]);
+  ensureContentScript = async () => true;
+  openModiObjScreen = async () => ({frameId:91,state:{hasModiObjSearchForm:true}});
+  waitForFrame = async () => ({frameId:91,state:{hasModiObjSearchForm:true}});
+  waitModiObjResult = async () => ({frame:{frameId:91},data:{state:'FOUND',matchCount:1,targetIndex:0}});
+  findIcrmPopupTab = async () => null;
+  sendAction = async (_tabId, _frameId, action, payload) => {
+    if (action === 'PREPARE_MODIOBJ_SEARCH') {
+      searches.push(payload?.options?.allStudents === true ? 'all' : 'targetOnly');
+      return {ok:true,data:{}};
+    }
+    if (action === 'OPEN_MODIOBJ_ICRM') return {ok:true,data:{rowIndex:0}};
+    return {ok:true};
+  };
+  await recheckArrivalStudent({
+    tabId:1, student:{name:'DING, YUQIONG',birthDate:'1998.11.04',studentNo:'9625020264'}
+  });
+  return searches;
+})()`, context);
+assert.deepEqual([...recheckNoWiden], ['targetOnly'], '찾았으면 재조회하지 않아야 합니다.');

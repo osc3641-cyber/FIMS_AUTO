@@ -93,6 +93,14 @@ const student = { name: 'AVAR, YAGMUR', birthDate: '20041213', studentNo: '96238
   // 숫자가 우연히 이어진 경우는 인정하지 않는다
   assert.equal(hooks.containsDateToken('920041213456', '20041213'), false);
   assert.deepEqual([...hooks.datesIn('입국 2026.08.24 출국 2026.09.01')], ['2026.08.24', '2026.09.01']);
+  // 수정대상자 팝업의 입국일자는 구분자 없는 8자리다: <td title="20260824">20260824</td>
+  assert.deepEqual([...hooks.datesIn('20260824')], ['2026.08.24']);
+  assert.deepEqual([...hooks.datesIn('20260824 20260901')], ['2026.08.24', '2026.09.01']);
+  // 날짜가 아닌 8자리 숫자는 날짜로 보지 않는다
+  assert.deepEqual([...hooks.datesIn('98110468')], []);
+  assert.deepEqual([...hooks.datesIn('20261345')], []);
+  // 더 긴 숫자열의 일부를 날짜로 오인하지 않는다
+  assert.deepEqual([...hooks.datesIn('9811046820034')], []);
 }
 
 // ── 실제 구조 회귀: 성명·생년월일·학번이 <input> 안에 있어도 찾아야 한다.
@@ -135,10 +143,34 @@ const student = { name: 'AVAR, YAGMUR', birthDate: '20041213', studentNo: '96238
   assert.equal(hooks.readModiObjResult(student).state, 'NOT_FOUND');
 }
 
-// ── 학번이 다르면 고르지 않는다
+// ── 이 목록에는 학번 열이 자체가 없다.
+// 학번은 검색폼(#sScholNo)으로 FIMS가 이미 걸러주므로, 행에서는 성명·생년월일을 본다.
+// 예전에는 행의 숫자열 중에 학번이 있어야 한다고 봤는데, 여권번호의 숫자 부분이
+// 후보로 잡혀 조회된 학생을 계속 탈락시켰다(실사례: EQ7555520 -> 7555520).
 {
-  const { hooks } = build({ rows: ['AVAR YAGMUR 2004.12.13 9699999999'] });
-  assert.equal(hooks.matchModiObjRows(student).length, 0, '학번이 다르면 일치로 보면 안 됩니다.');
+  const { hooks } = build({
+    rows: [{
+      text: '1 /여성 중국 D-2-8 2027.01.31 2026.09.01 단기유학과정 문화인류학과',
+      fields: ['DING YUQIONG', '9811046820034', 'EQ7555520', '1998.11.04']
+    }]
+  });
+  assert.equal(
+    hooks.matchModiObjRows({ name: 'DING, YUQIONG', birthDate: '19981104', studentNo: '9625020264' }).length,
+    1,
+    '여권번호의 숫자 때문에 대상 학생을 탈락시키면 안 됩니다.'
+  );
+}
+
+// 성명이나 생년월일이 다르면 여전히 고르지 않는다
+{
+  const { hooks } = build({
+    rows: [{ text: '1 /여성 중국', fields: ['DING YUQIONG', 'EQ7555520', '1990.01.01'] }]
+  });
+  assert.equal(
+    hooks.matchModiObjRows({ name: 'DING, YUQIONG', birthDate: '19981104', studentNo: '9625020264' }).length,
+    0,
+    '생년월일이 다르면 일치로 보면 안 됩니다.'
+  );
 }
 
 // ── 동일 조건이 2건이면 자동 처리하지 않는다
@@ -150,6 +182,20 @@ const student = { name: 'AVAR, YAGMUR', birthDate: '20041213', studentNo: '96238
 }
 
 const popupBody = 'AVAR YAGMUR 2004.12.13 출입국기록';
+
+// ── 팝업: 실제 구조 — 입국일자가 구분자 없는 20260824 로 표시된다
+{
+  const { hooks, radioNodes, updateButton } = build({
+    pathname: '/isi/ICRMIntlStudInfoPopR.xec',
+    radios: [{ text: '20260824 인천', title: 'DING YUQIONG' }],
+    bodyText: 'DING YUQIONG 1998.11.04 출입국기록'
+  });
+  const applied = hooks.applyIcrmUpdate({ name: 'DING, YUQIONG', birthDate: '19981104', studentNo: '9625020264' });
+  assert.equal(applied.ok, true, applied.message);
+  assert.equal(applied.data.arrivalDate, '2026.08.24', '구분자 없는 입국일자를 읽어야 합니다.');
+  assert.equal(radioNodes[0].checked, true);
+  assert.equal(updateButton.clicked, true);
+}
 
 // ── 팝업: 입국일자가 있는 기록이 정확히 1건이면 선택 후 수정(Update)
 {

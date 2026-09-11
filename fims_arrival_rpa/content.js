@@ -671,9 +671,18 @@
     });
   }
 
+  // FIMS는 화면에 따라 2026.08.24 로도, 20260824 로도 보여준다.
+  // 수정대상자 팝업의 입국일자는 구분자 없는 8자리다(td title="20260824").
+  // 월·일 범위를 검사해 아무 8자리 숫자나 날짜로 보지 않는다.
+  const DATE_WITH_SEPARATOR = /(?<![0-9])((?:19|20)\d{2})[.\-\/](0[1-9]|1[0-2])[.\-\/](0[1-9]|[12]\d|3[01])(?![0-9])/g;
+  const DATE_COMPACT = /(?<![0-9])((?:19|20)\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(?![0-9])/g;
+
   function datesIn(text) {
-    return [...String(text || '').matchAll(/(?<![0-9])(\d{4})[.\-\/](\d{2})[.\-\/](\d{2})(?![0-9])/g)]
-      .map((match) => `${match[1]}.${match[2]}.${match[3]}`);
+    const source = String(text || '');
+    const found = [];
+    for (const match of source.matchAll(DATE_WITH_SEPARATOR)) found.push(`${match[1]}.${match[2]}.${match[3]}`);
+    for (const match of source.matchAll(DATE_COMPACT)) found.push(`${match[1]}.${match[2]}.${match[3]}`);
+    return [...new Set(found)];
   }
 
   function modiObjRows() {
@@ -708,16 +717,22 @@
       if (!text) return false;
       if (!expectedName || !normalizeName(text).includes(expectedName)) return false;
       if (!expectedBirth || !containsDateToken(text, expectedBirth)) return false;
-      if (expectedStudentNo) {
-        const rowNumbers = text.match(/(?<![0-9])\d{6,12}(?![0-9])/g) || [];
-        // 학번 칸이 비어 있는 행도 있으므로, 숫자열이 하나라도 있으면 그 중에 있어야 한다.
-        if (rowNumbers.length && !rowNumbers.includes(expectedStudentNo)) return false;
-      }
+      // 이 목록에는 학번 열이 없다(순번/성명·성별/등록번호·여권번호/생년월일·국적/
+      // 체류자격/입국·입학일자/교육과정/수정). 학번은 이미 검색조건으로 FIMS가
+      // 걸러줬으므로 행에서는 성명·생년월일만 확인한다.
+      // 예전에는 행의 숫자열 중에 학번이 있어야 한다고 봤는데, 여권번호의 숫자
+      // 부분(EQ7555520 -> 7555520)이 후보로 잡혀 조회된 학생을 계속 탈락시켰다.
+      // 학번이 행에 실제로 있는 경우에만 추가 확인한다.
+      if (expectedStudentNo && text.includes(expectedStudentNo)) return true;
       return true;
     });
   }
 
-  function prepareModiObjSearch(payload) {
+  // 검색은 성명·생년월일·학번 세 항목으로만 한다. 등록번호·교육과정은 건드리지 않는다.
+  // options.allStudents 가 true 면 '재학생정보수정대상자' 체크를 풀어 전체 재학생에서 찾는다.
+  // (화면 안내: Unchecked시 전체 재학생 — 수정대상자로 분류되지 않은 학생은
+  //  체크된 상태에서는 조회되지 않는다.)
+  function prepareModiObjSearch(payload, options = {}) {
     const nameInput = document.querySelector(MODIOBJ.name);
     const birthInput = document.querySelector(MODIOBJ.birth);
     const studentNoInput = document.querySelector(MODIOBJ.studentNo);
@@ -735,7 +750,8 @@
     setNativeValue(birthInput, birthDate);
     setNativeValue(studentNoInput, studentNo);
     const targetOnly = document.querySelector(MODIOBJ.targetOnly);
-    if (targetOnly && typeof targetOnly.checked === 'boolean') setChecked(targetOnly, true);
+    const wantTargetOnly = options.allStudents !== true;
+    if (targetOnly && typeof targetOnly.checked === 'boolean') setChecked(targetOnly, wantTargetOnly);
 
     // 입력 직후 폼이 다시 그려질 수 있으므로 DOM에서 다시 찾아 확인하고 조용히 재시도한다.
     const reName = () => document.querySelector(MODIOBJ.name);
@@ -760,7 +776,16 @@
     if (!searchButton || !scheduleClick(searchButton)) {
       return { ok: false, message: '수정대상자 조회 버튼을 찾지 못했습니다.' };
     }
-    return { ok: true, data: { name: searchName, birthDate, studentNo, documentToken: DOCUMENT_TOKEN } };
+    return {
+      ok: true,
+      data: {
+        name: searchName,
+        birthDate,
+        studentNo,
+        targetOnly: Boolean(document.querySelector(MODIOBJ.targetOnly)?.checked),
+        documentToken: DOCUMENT_TOKEN
+      }
+    };
   }
 
   function readModiObjResult(payload) {
@@ -830,7 +855,11 @@
     if (!radios.length) {
       return { ok: false, code: 'NO_CANDIDATE', message: '수정 팝업에 선택할 출입국 기록이 없습니다.' };
     }
-    const dated = info.candidates.filter((candidate) => candidate.hasDate);
+    // 라디오 title 에 학생명이 있으면 그것으로 먼저 좁힌다(다른 학생 기록 배제).
+    const expectedName = normalizeFimsName(payload.name || '');
+    const titled = info.candidates.filter((candidate) => candidate.title && sameFimsName(candidate.title, expectedName));
+    const pool = titled.length ? titled : info.candidates;
+    const dated = pool.filter((candidate) => candidate.hasDate);
     if (dated.length === 0) {
       return { ok: false, code: 'NO_ARRIVAL_DATE', message: `수정 팝업에 입국일자가 있는 기록이 없습니다. (후보 ${info.candidateCount}건)` };
     }
@@ -869,7 +898,7 @@
         if (!menu) return { ok: false, message: '재학생정보 수정대상자 메뉴(#nMenuTreeHome8)를 찾지 못했습니다.' };
         return scheduleClick(menu) ? { ok: true } : { ok: false, message: '수정대상자 메뉴를 클릭하지 못했습니다.' };
       }
-      case 'PREPARE_MODIOBJ_SEARCH': return prepareModiObjSearch(payload);
+      case 'PREPARE_MODIOBJ_SEARCH': return prepareModiObjSearch(payload, payload?.options || {});
       case 'READ_MODIOBJ_RESULT': return { ok: true, data: readModiObjResult(payload) };
       case 'OPEN_MODIOBJ_ICRM': return openModiObjIcrm(payload);
       case 'READ_ICRM_CANDIDATES': return { ok: true, data: readIcrmCandidates(payload) };
@@ -907,6 +936,7 @@
     datesIn,
     matchModiObjRows,
     rowSearchText,
+    prepareModiObjSearch,
     readModiObjResult,
     readIcrmCandidates,
     applyIcrmUpdate

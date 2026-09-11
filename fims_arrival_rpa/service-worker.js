@@ -1134,6 +1134,23 @@ async function waitForSaveOutcome(tabId, student, timeoutMs = SAVE_OUTCOME_TIMEO
   return { state: 'NOT_EXECUTED', verification: lastVerification, messages: [] };
 }
 
+// 수정 팝업의 알림을 읽어 성공/거부/무응답을 구분한다.
+async function waitForPopupOutcome(popupTabId, timeoutMs = 15000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const logs = await getDialogLogs(popupTabId).catch(() => []);
+    const alerts = logs
+      .filter((item) => item.kind === 'alert')
+      .map((item) => normalizeText(item.message))
+      .filter(Boolean);
+    const problems = alerts.filter((message) => !isSaveSuccessMessage(message));
+    if (problems.length) return { state: 'REJECTED', message: problems.at(-1), messages: alerts };
+    if (alerts.some(isSaveSuccessMessage)) return { state: 'APPLIED', messages: alerts };
+    await sleep(400);
+  }
+  return { state: 'NO_RESPONSE', messages: [] };
+}
+
 async function recheckArrivalStudent({ tabId, student }) {
   if (!tabId) throw new Error('먼저 로그인해 FIMS 창을 연 뒤 별도처리를 실행하세요.');
   if (!student?.name || !student?.birthDate || !student?.studentNo) {
@@ -1151,16 +1168,36 @@ async function recheckArrivalStudent({ tabId, student }) {
     if (!searchFrame) {
       return { code: 'MODIOBJ_SCREEN_FAILED', result: '별도 처리 필요', detail: '수정대상자 조회화면을 확인하지 못했습니다.' };
     }
-    const prepared = await sendAction(tabId, searchFrame.frameId, 'PREPARE_MODIOBJ_SEARCH', student);
-    if (!prepared.ok) {
-      return { code: 'MODIOBJ_SEARCH_FAILED', result: '별도 처리 필요', detail: prepared.message || '수정대상자 조회 실행 실패' };
+    const runSearch = async (options) => {
+      const frame = await waitForFrame(tabId, (state) => state.hasModiObjSearchForm === true, 20000);
+      if (!frame) return { prepared: { ok: false, message: '수정대상자 조회화면을 확인하지 못했습니다.' }, found: null };
+      const prepared = await sendAction(tabId, frame.frameId, 'PREPARE_MODIOBJ_SEARCH', { ...student, options });
+      if (!prepared.ok) return { prepared, found: null };
+      return { prepared, found: await waitModiObjResult(tabId, student, 30000) };
+    };
+
+    // 검색은 성명·생년월일·학번 세 항목으로만 한다.
+    let attempt = await runSearch({});
+    if (!attempt.prepared.ok) {
+      return { code: 'MODIOBJ_SEARCH_FAILED', result: '별도 처리 필요', detail: attempt.prepared.message || '수정대상자 조회 실행 실패' };
+    }
+    // 수정대상자로 분류되지 않은 학생은 체크된 상태에서 조회되지 않는다.
+    // 못 찾으면 체크를 풀어(전체 재학생) 한 번 더 찾는다. 신원 확인 규칙은 그대로다.
+    let widened = false;
+    if (['NOT_FOUND', 'TIMEOUT'].includes(attempt.found?.data?.state)) {
+      const retry = await runSearch({ allStudents: true });
+      if (retry.prepared.ok && retry.found) {
+        widened = true;
+        attempt = retry;
+      }
     }
 
-    const found = await waitModiObjResult(tabId, student, 30000);
+    const found = attempt.found || { frame: null, data: { state: 'TIMEOUT' } };
     const state = found.data?.state || 'TIMEOUT';
     if (state !== 'FOUND') {
+      const scope = widened ? '수정대상자 + 전체 재학생 모두' : '수정대상자 목록';
       const reason = {
-        NOT_FOUND: '수정대상자 목록에서 해당 학생을 찾지 못했습니다.',
+        NOT_FOUND: `${scope}에서 성명·생년월일·학번이 일치하는 학생을 찾지 못했습니다.`,
         AMBIGUOUS: `수정대상자 목록에서 동일 조건이 ${found.data?.matchCount || 0}건이라 자동 처리하지 않았습니다.`,
         TIMEOUT: '수정대상자 조회 결과를 확정하지 못했습니다.'
       }[state] || `수정대상자 조회 상태 ${state}`;
@@ -1198,12 +1235,21 @@ async function recheckArrivalStudent({ tabId, student }) {
       };
     }
 
-    // 팝업이 저장 후 닫힐 수 있다. 잠시 기다린 뒤 남아 있으면 정리한다.
-    await sleep(2500);
-    const popupLogs = await getDialogLogs(popupTabId).catch(() => []);
-    const popupMessages = popupLogs.map((item) => normalizeText(item.message)).filter(Boolean);
+    // 수정(Update) 후 FIMS는 확인창을 띄우고(자동 승인) 성공 알림을 보여준다.
+    // 저장 판정과 같은 원칙으로, 증거가 있을 때만 반영된 것으로 본다.
+    const popupOutcome = await waitForPopupOutcome(popupTabId, 15000);
     await closeTabQuietly(popupTabId);
     popupTabId = null;
+    if (popupOutcome.state === 'REJECTED') {
+      return {
+        code: 'ICRM_REJECTED',
+        result: '별도 처리 필요',
+        arrivalDate: '',
+        note: 'FIMS가 출입국 기록 연결을 거부했습니다.',
+        detail: `FIMS 알림: ${popupOutcome.message}`
+      };
+    }
+    const popupMessages = popupOutcome.messages || [];
 
     const appliedDate = formatDate(applied.data?.arrivalDate || '');
     const confirmed = await confirmArrivalAfterRecheck(tabId, student);
