@@ -102,17 +102,28 @@ if (!workbookPath) {
 const originalBytes = await fs.readFile(workbookPath);
 const zip = await JSZip.loadAsync(originalBytes);
 const configXml = await zip.file('xl/worksheets/sheet1.xml').async('text');
-assert.match(configXml, /r="B6"[^>]*t="str"[\s\S]*?<x:v>20260901<\/x:v>/);
+// 템플릿을 편집한 도구에 따라 t="str"/<v> 또는 inlineStr/<is><t> 로 저장된다.
+// 인코딩이 아니라 값이 살아 있는지만 확인한다.
+assert.match(configXml, /r="B6"/);
+assert.match(configXml, /20260901/);
 const sheetPath = 'xl/worksheets/sheet2.xml';
 let sheetXml = await zip.file(sheetPath).async('text');
+// 네임스페이스 접두사(x:)는 저장 도구마다 다르므로 파일에서 알아낸다.
+const ns = /<x:(?:worksheet|sheetData)/.test(sheetXml) ? 'x:' : '';
 const cells = [
   ['A5', 'Y'],
   ['B5', 'SAMPLE LONGNAME TESTCASE OVERFLOW ALPHA'],
   ['C5', '20000102'],
   ['D5', '0951112345'],
-  ['E5', '왕복 테스트']
-].map(([ref, value]) => `<x:c r="${ref}" t="inlineStr"><x:is><x:t>${value}</x:t></x:is></x:c>`).join('');
-sheetXml = sheetXml.replace(/<x:row r="5"[^>]*>[\s\S]*?<\/x:row>/, `<x:row r="5">${cells}</x:row>`);
+  ['E5', '왕복 테스트'],
+  ['F5', '-'],
+  ['G5', '현지자매학교추천'],
+  ['H5', 'Sample University']
+].map(([ref, value]) => `<${ns}c r="${ref}" t="inlineStr"><${ns}is><${ns}t>${value}</${ns}t></${ns}is></${ns}c>`).join('');
+sheetXml = sheetXml.replace(
+  new RegExp(`<${ns}row r="5"[^>]*>[\\s\\S]*?</${ns}row>`),
+  `<${ns}row r="5">${cells}</${ns}row>`
+);
 zip.file(sheetPath, sheetXml);
 const testBytes = await zip.generateAsync({ type: 'uint8array' });
 const parsed = await FimsXlsx.parseWorkbook({
@@ -126,6 +137,10 @@ assert.equal(parsed.students.length, 1);
 assert.equal(parsed.students[0].name, 'SAMPLE LONGNAME TESTCASE OVERFLOW ALPHA');
 assert.equal(parsed.students[0].birthDate, '2000.01.02');
 assert.equal(parsed.students[0].studentNo, '0951112345');
+// 새 선택 항목: 값이 있으면 그대로 읽고, 비어 있으면 빈 문자열이어야 한다.
+assert.equal(parsed.students[0].localRecommender, '-');
+assert.equal(parsed.students[0].localRecommenderType, '현지자매학교추천');
+assert.equal(parsed.students[0].lastSchool, 'Sample University');
 
 const resultBlob = await FimsXlsx.exportResults(parsed.originalBytes, [{
   sequence: 1,

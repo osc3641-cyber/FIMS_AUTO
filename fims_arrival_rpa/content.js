@@ -565,6 +565,54 @@
     return { changed: finalValue === cleaned, original, cleaned, finalValue };
   }
 
+  // 콤보에서 value 또는 표시문자로 옵션을 고른다.
+  // 엑셀에 '50' 을 적든 '현지자매학교추천' 을 적든 동작해야 한다.
+  function setSelectByValueOrText(select, wanted) {
+    if (!select?.options) return false;
+    const target = normalizeText(wanted);
+    if (!target) return false;
+    const options = [...select.options];
+    const match = options.find((option) => normalizeText(option.value) === target)
+      || options.find((option) => normalizeText(option.text) === target)
+      || options.find((option) => normalizeCompact(option.text) === normalizeCompact(target));
+    if (!match) return false;
+    setNativeValue(select, match.value);
+    if (select.value !== match.value) setNativeValueQuiet(select, match.value);
+    return select.value === match.value;
+  }
+
+  // 엑셀에 값이 있을 때만 덮어쓴다. 비어 있으면 FIMS 값을 그대로 둔다.
+  function applyOptionalFields(payload) {
+    const applied = [];
+    const failed = [];
+
+    const text = (selector, value, label) => {
+      const wanted = normalizeText(value);
+      if (!wanted) return;
+      const field = document.querySelector(selector);
+      if (!field) { failed.push(`${label}(칸 없음)`); return; }
+      setNativeValue(field, wanted);
+      let current = document.querySelector(selector);
+      if (normalizeText(current?.value) !== wanted) { setNativeValueQuiet(current, wanted); current = document.querySelector(selector); }
+      if (normalizeText(current?.value) === wanted) applied.push(`${label}=${wanted}`);
+      else failed.push(`${label}(입력 유지 실패)`);
+    };
+
+    text('#lcRecomEntity, input[name="lcRecomEntity"]', payload.localRecommender, '현지추천단체');
+    text('#lastOriSchol, input[name="lastOriSchol"]', payload.lastSchool, '최종출신학교');
+
+    const typeWanted = normalizeText(payload.localRecommenderType);
+    if (typeWanted) {
+      const select = document.querySelector('#lcRecomEntityGb, select[name="lcRecomEntityGb"]');
+      if (!select) failed.push('현지추천단체구분(칸 없음)');
+      else if (setSelectByValueOrText(select, typeWanted)) {
+        const chosen = normalizeText(select.options[select.selectedIndex]?.text || '');
+        applied.push(`현지추천단체구분=${chosen || select.value}`);
+      } else failed.push(`현지추천단체구분(선택지에 "${typeWanted}" 없음)`);
+    }
+    return { applied, failed };
+  }
+
   function fillArrivalEdit(payload) {
     const identity = readDetailData(payload);
     if (!identity.nameMatches || !identity.birthDateMatches) return { ok: false, message: '수정화면의 성명·생년월일이 엑셀 대상과 일치하지 않습니다.' };
@@ -595,8 +643,14 @@
     // 남아 있으면 우리가 넣은 값과 무관하게 저장이 거부된다.
     const schoolFix = sanitizeLastSchool();
 
+    // 엑셀의 선택 항목을 먼저 반영한다(값이 있는 것만).
+    const optional = applyOptionalFields(payload);
+
     const studentNoResult = settle('#scholNo', expectedStudentNo, (el) => digits(el.value) === expectedStudentNo);
-    const admissionResult = settle('#admsnYmd', expectedAdmissionDate, (el) => digits(el.value) === digits(expectedAdmissionDate));
+    // FIMS는 입학(복학)일자를 2026.09.01 형식으로만 저장한다. 20260901 로 남아 있으면
+    // 저장이 되지 않는다. 예전 검증은 digits() 로 점을 떼고 비교해 두 형식을 모두
+    // 통과시켰기 때문에 이 문제를 잡지 못했다. 이제 점 포함 형식과 정확히 일치해야 한다.
+    const admissionResult = settle('#admsnYmd', expectedAdmissionDate, (el) => normalizeText(el.value) === expectedAdmissionDate);
 
     const studentNo = studentNoResult.element || document.querySelector('#scholNo');
     const admissionDate = admissionResult.element || document.querySelector('#admsnYmd');
@@ -615,10 +669,14 @@
     if (arrivalSelect.value !== 'N' || selectedText !== '입국') {
       return { ok: false, message: `입국 선택값을 확인하지 못했습니다: ${arrivalSelect.value}/${selectedText}` };
     }
-    if (digits(admissionDate.value) !== digits(expectedAdmissionDate)) {
+    const admissionValue = normalizeText(admissionDate.value);
+    if (admissionValue !== expectedAdmissionDate) {
+      const sameDigits = digits(admissionValue) === digits(expectedAdmissionDate);
       return {
         ok: false,
-        message: `입학(복학)일자 입력값이 FIMS 화면에 유지되지 않았습니다. [${fieldReport('#admsnYmd', expectedAdmissionDate)} / 재시도 ${admissionResult.retried ? '함' : '안함'}]`
+        message: sameDigits
+          ? `입학(복학)일자가 "${admissionValue}" 형식으로 남아 있습니다. FIMS는 "${expectedAdmissionDate}" 형식이어야 저장됩니다. [${fieldReport('#admsnYmd', expectedAdmissionDate)} / 재시도 ${admissionResult.retried ? '함' : '안함'}]`
+          : `입학(복학)일자 입력값이 FIMS 화면에 유지되지 않았습니다. [${fieldReport('#admsnYmd', expectedAdmissionDate)} / 재시도 ${admissionResult.retried ? '함' : '안함'}]`
       };
     }
     return {
@@ -631,6 +689,8 @@
         immigrationArrivalDate: normalizeText(document.querySelector('#eYmd')?.value || ''),
         retriedStudentNo: studentNoResult.retried,
         retriedAdmissionDate: admissionResult.retried,
+        optionalApplied: optional.applied,
+        optionalFailed: optional.failed,
         schoolSanitized: schoolFix.changed === true,
         schoolBefore: schoolFix.changed ? schoolFix.original : '',
         schoolAfter: schoolFix.changed ? schoolFix.cleaned : ''
@@ -996,6 +1056,8 @@
     collectDiagnostics,
     probeSelector,
     parseSimpleCall,
+    setSelectByValueOrText,
+    applyOptionalFields,
     sanitizeSchoolName,
     needsSchoolSanitize,
     sanitizeLastSchool,

@@ -176,6 +176,10 @@
     const birthDateColumn = findColumn(header.headers, ['생년월일']);
     const studentNoColumn = findColumn(header.headers, ['학번']);
     const noteColumn = findColumn(header.headers, ['비고', '메모']);
+    // 선택 항목. 비워두면 FIMS에 입력된 값을 그대로 둔다.
+    const localRecommenderColumn = findColumn(header.headers, ['현지추천단체']);
+    const localRecommenderTypeColumn = findColumn(header.headers, ['현지추천단체구분', '현지자매학교']);
+    const lastSchoolColumn = findColumn(header.headers, ['최종출신학교']);
     const students = [];
 
     rows.slice(header.index + 1).forEach((row, offset) => {
@@ -194,7 +198,10 @@
         name: rawName,
         birthDate: dateDigits(rawBirthDate, `입국신고명단 ${header.index + offset + 2}행 생년월일`),
         studentNo: rawNo,
-        note: noteColumn >= 0 ? normalizeText(row?.[noteColumn]) : ''
+        note: noteColumn >= 0 ? normalizeText(row?.[noteColumn]) : '',
+        localRecommender: localRecommenderColumn >= 0 ? normalizeText(row?.[localRecommenderColumn]) : '',
+        localRecommenderType: localRecommenderTypeColumn >= 0 ? normalizeText(row?.[localRecommenderTypeColumn]) : '',
+        lastSchool: lastSchoolColumn >= 0 ? normalizeText(row?.[lastSchoolColumn]) : ''
       });
     });
 

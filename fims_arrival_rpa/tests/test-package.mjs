@@ -5,7 +5,7 @@ import path from 'node:path';
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'manifest.json'), 'utf8'));
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.2.2');
+assert.equal(manifest.version, '1.3.0');
 assert.equal(manifest.name, 'FIMS 입국신고 자동화 (Excel)');
 assert.ok(!manifest.permissions.includes('debugger'), '로그인과 저장 처리에 Chrome debugger 권한을 사용하면 안 됩니다.');
 assert.ok(manifest.permissions.includes('cookies'), '새 FIMS 로그인 전에 세션 쿠키를 지울 권한이 필요합니다.');
@@ -107,6 +107,17 @@ const bridge = await fs.readFile(path.join(root, 'dialog-bridge.js'), 'utf8');
 assert.match(bridge, /__FIMS_ARRIVAL_RPA_INVOKE__/, 'MAIN world 함수 호출 다리가 필요합니다.');
 assert.match(content, /parseSimpleCall/, 'javascript: 링크를 해석해야 합니다.');
 assert.match(content, /invokePageFunction/, '페이지 함수를 직접 호출해야 합니다.');
+
+// 1.3.0: 엑셀 선택 항목 + 입학일자 형식
+assert.match(content, /lcRecomEntity/, '현지추천단체 셀렉터가 필요합니다.');
+assert.match(content, /lcRecomEntityGb/, '현지추천단체구분 셀렉터가 필요합니다.');
+assert.match(content, /applyOptionalFields/, '엑셀 선택 항목 입력 로직이 필요합니다.');
+assert.match(xlsx, /localRecommenderType/, '엑셀에서 현지추천단체구분을 읽어야 합니다.');
+assert.doesNotMatch(
+  content,
+  /digits\(el\.value\) === digits\(expectedAdmissionDate\)/,
+  '입학일자를 digits 로 비교하면 20260901 형식을 통과시킵니다.'
+);
 
 // 화면 버전은 manifest 에서 읽는다 (하드코딩 금지)
 const runnerHtmlRaw = await fs.readFile(path.join(root, 'runner.html'), 'utf8');
