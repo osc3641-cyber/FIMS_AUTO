@@ -7,10 +7,23 @@ const stored = new Map();
 let nativeConfirmCalls = 0;
 let nativeAlertCalls = 0;
 
+// 페이지 함수 호출 다리를 검증하기 위한 최소 DOM 목
+const invokeListeners = [];
+const rootAttributes = new Map();
+const pageFunctions = { calls: [] };
+
 const context = vm.createContext({
   console,
   Date,
   JSON,
+  document: {
+    addEventListener: (type, handler) => invokeListeners.push({ type, handler }),
+    documentElement: {
+      setAttribute: (name, value) => rootAttributes.set(name, value),
+      getAttribute: (name) => (rootAttributes.has(name) ? rootAttributes.get(name) : null),
+      removeAttribute: (name) => rootAttributes.delete(name)
+    }
+  },
   location: { href: 'https://fims.hikorea.go.kr/isi/IntlStudBaInfoDtlRU.xec' },
   localStorage: {
     getItem: (key) => stored.has(key) ? stored.get(key) : null,
@@ -58,6 +71,10 @@ const nextFrame = vm.createContext({
   console,
   Date,
   JSON,
+  document: {
+    addEventListener: () => {},
+    documentElement: { setAttribute: () => {}, getAttribute: () => null, removeAttribute: () => {} }
+  },
   location: { href: 'https://fims.hikorea.go.kr/isi/MainR.isi' },
   localStorage: {
     getItem: (key) => stored.has(key) ? stored.get(key) : null,
@@ -72,5 +89,33 @@ vm.runInContext(source, nextFrame, { filename: 'dialog-bridge-new-frame.js' });
 nextFrame.alert('아래 유학생현황을 확인 후 처리바랍니다. 변동신고반려처리건수 : 44');
 assert.equal(nextFrameNativeAlertCalls, 0);
 assert.equal(nextFrame.__FIMS_ARRIVAL_RPA_GET_DIALOG_LOG__().at(-1).kind, 'alert');
+
+
+// ── 페이지 함수 직접 호출 다리 ────────────────────────────────────────────
+// FIMS의 <a href="javascript:fnc()"> 는 click() 이 CSP로 차단된다.
+// MAIN world 에서 전역 함수를 평범하게 호출해 우회한다.
+const invokeEntry = invokeListeners.find((item) => item.type === '__FIMS_ARRIVAL_RPA_INVOKE__');
+assert.ok(invokeEntry, '함수 호출 다리가 등록돼야 합니다.');
+
+context.fncGetICRMDetail = (...args) => { pageFunctions.calls.push(['fncGetICRMDetail', args]); };
+
+invokeEntry.handler({ detail: { fn: 'fncGetICRMDetail', args: ['0130143260733451', 0], token: 't1' } });
+assert.deepEqual(pageFunctions.calls.at(-1), ['fncGetICRMDetail', ['0130143260733451', 0]]);
+let result = JSON.parse(rootAttributes.get('data-fims-arrival-rpa-invoke'));
+assert.equal(result.ok, true);
+assert.equal(result.token, 't1');
+
+// 없는 함수는 조용히 성공했다고 하면 안 된다
+invokeEntry.handler({ detail: { fn: 'fncNotThere', args: [], token: 't2' } });
+result = JSON.parse(rootAttributes.get('data-fims-arrival-rpa-invoke'));
+assert.equal(result.ok, false);
+assert.match(result.message, /찾지 못했습니다/);
+
+// 함수가 예외를 던져도 결과에 남아야 한다
+context.fncBoom = () => { throw new Error('저장 중 오류'); };
+invokeEntry.handler({ detail: { fn: 'fncBoom', args: [], token: 't3' } });
+result = JSON.parse(rootAttributes.get('data-fims-arrival-rpa-invoke'));
+assert.equal(result.ok, false);
+assert.match(result.message, /저장 중 오류/);
 
 console.log('dialog bridge tests passed');

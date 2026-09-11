@@ -5,7 +5,7 @@ import path from 'node:path';
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'manifest.json'), 'utf8'));
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.2.1');
+assert.equal(manifest.version, '1.2.2');
 assert.equal(manifest.name, 'FIMS 입국신고 자동화 (Excel)');
 assert.ok(!manifest.permissions.includes('debugger'), '로그인과 저장 처리에 Chrome debugger 권한을 사용하면 안 됩니다.');
 assert.ok(manifest.permissions.includes('cookies'), '새 FIMS 로그인 전에 세션 쿠키를 지울 권한이 필요합니다.');
@@ -101,6 +101,12 @@ assert.doesNotMatch(content, /const text = normalizeText\(row\?\.innerText/, '�
 assert.match(content, /DATE_COMPACT/, '구분자 없는 날짜(20260824)를 읽어야 합니다.');
 assert.match(content, /allStudents/, '못 찾으면 전체 재학생으로 재조회해야 합니다.');
 assert.doesNotMatch(content, /rowNumbers\.includes/, '행의 숫자열로 학번을 대조하면 여권번호에 걸립니다.');
+
+// 1.2.2: javascript: 링크는 click() 이 CSP로 차단되므로 페이지 함수를 직접 부른다
+const bridge = await fs.readFile(path.join(root, 'dialog-bridge.js'), 'utf8');
+assert.match(bridge, /__FIMS_ARRIVAL_RPA_INVOKE__/, 'MAIN world 함수 호출 다리가 필요합니다.');
+assert.match(content, /parseSimpleCall/, 'javascript: 링크를 해석해야 합니다.');
+assert.match(content, /invokePageFunction/, '페이지 함수를 직접 호출해야 합니다.');
 
 // 화면 버전은 manifest 에서 읽는다 (하드코딩 금지)
 const runnerHtmlRaw = await fs.readFile(path.join(root, 'runner.html'), 'utf8');

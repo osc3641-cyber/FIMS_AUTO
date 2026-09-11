@@ -85,6 +85,37 @@
     return mode;
   };
 
+  // ── 페이지 함수 직접 호출 다리 ──────────────────────────────────────────
+  // FIMS 링크 중 일부는 <a href="javascript:fnc...()"> 형태다.
+  // 확장에서 element.click() 으로 누르면 브라우저가 그 javascript: URL 실행을
+  // Content Security Policy 위반으로 차단해(The action has been blocked)
+  // 클릭이 아무 일도 하지 않는다.
+  // 대신 여기(MAIN world)에서 페이지의 전역 함수를 평범하게 호출한다.
+  // eval 이나 inline script 가 아니므로 CSP에 걸리지 않는다.
+  const INVOKE_EVENT = '__FIMS_ARRIVAL_RPA_INVOKE__';
+  const INVOKE_RESULT_ATTR = 'data-fims-arrival-rpa-invoke';
+
+  document.addEventListener(INVOKE_EVENT, (event) => {
+    const detail = event?.detail || {};
+    const name = String(detail.fn || '');
+    const args = Array.isArray(detail.args) ? detail.args : [];
+    let ok = false;
+    let message = '';
+    try {
+      const fn = name && typeof window[name] === 'function' ? window[name] : null;
+      if (!fn) message = `페이지 함수 ${name || '(이름 없음)'} 를 찾지 못했습니다.`;
+      else { fn.apply(window, args); ok = true; }
+    } catch (error) {
+      message = error?.message || String(error);
+    }
+    try {
+      document.documentElement.setAttribute(
+        INVOKE_RESULT_ATTR,
+        JSON.stringify({ token: detail.token || '', ok, message })
+      );
+    } catch (_) {}
+  });
+
   window.__FIMS_ARRIVAL_RPA_GET_DIALOG_LOG__ = () => readJson(LOG_KEY, []);
   window.__FIMS_ARRIVAL_RPA_CLEAR_DIALOG_MODE__ = clear;
 

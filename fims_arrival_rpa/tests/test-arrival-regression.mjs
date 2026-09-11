@@ -155,3 +155,39 @@ console.log('arrival regression test passed');
 }
 
 console.log('identity hardening test passed');
+
+// ── javascript: 링크 파싱 ──────────────────────────────────────────────────
+// FIMS의 <a href="javascript:fnc(...)"> 는 click() 이 CSP로 차단된다
+// (Running the JavaScript URL violates ... The action has been blocked).
+// 함수명과 단순 리터럴 인자만 뽑아 MAIN world 에서 직접 호출한다.
+{
+  const { parseSimpleCall } = buildContext({ pathname: '/isi/index.html' });
+
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(parseSimpleCall("javascript:fncGetICRMDetail('0130143260733451', 0)"))),
+    { fn: 'fncGetICRMDetail', args: ['0130143260733451', 0] }
+  );
+  assert.deepEqual(JSON.parse(JSON.stringify(parseSimpleCall('fncSave()'))), { fn: 'fncSave', args: [] });
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(parseSimpleCall("javascript:fncUpdate(); return false;"))),
+    { fn: 'fncUpdate', args: [] }
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(parseSimpleCall('fnc("a", 1, true, null)'))),
+    { fn: 'fnc', args: ['a', 1, true, null] }
+  );
+  // 쉼표가 들어간 문자열 인자도 쪼개지면 안 된다
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(parseSimpleCall("fnc('A, B', 2)"))),
+    { fn: 'fnc', args: ['A, B', 2] }
+  );
+
+  // 해석할 수 없으면 null 을 돌려 일반 클릭으로 넘긴다
+  assert.equal(parseSimpleCall('javascript:fnc(this)'), null, 'this 는 해석하지 않습니다.');
+  assert.equal(parseSimpleCall('javascript:fnc(a + b)'), null, '표현식은 해석하지 않습니다.');
+  assert.equal(parseSimpleCall('javascript:void(0)'), null, 'void(0) 은 호출 대상이 아닙니다.');
+  assert.equal(parseSimpleCall(''), null);
+  assert.equal(parseSimpleCall('#url'), null);
+}
+
+console.log('javascript-link parse test passed');

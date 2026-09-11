@@ -46,10 +46,76 @@
     ].filter(Boolean).join(' '));
   }
 
+  // <a href="javascript:fnc(...)"> 를 click() 으로 누르면 브라우저가 그 javascript:
+  // URL 실행을 CSP 위반으로 차단한다(The action has been blocked). 클릭은 됐는데
+  // 아무 일도 일어나지 않는 상태가 된다.
+  // 이런 링크는 MAIN world 다리를 통해 페이지 함수를 직접 호출한다.
+  const INVOKE_EVENT = '__FIMS_ARRIVAL_RPA_INVOKE__';
+  const INVOKE_RESULT_ATTR = 'data-fims-arrival-rpa-invoke';
+
+  // fnc('abc', 0) 처럼 단순 리터럴 인자만 해석한다.
+  // this·표현식 등이 섞이면 해석하지 않고 일반 클릭으로 넘긴다.
+  function parseSimpleCall(code) {
+    const source = String(code || '').replace(/^\s*javascript\s*:/i, '').trim();
+    const match = source.match(/^([A-Za-z_$][\w$]*)\s*\(([^()]*)\)\s*;?/);
+    if (!match) return null;
+    // javascript:void(0) 처럼 흔한 형태를 함수 호출로 오인하지 않는다.
+    const RESERVED = new Set(['void', 'return', 'typeof', 'delete', 'new', 'if', 'for', 'while', 'switch', 'catch', 'function']);
+    if (RESERVED.has(match[1])) return null;
+    const rawArgs = match[2].trim();
+    if (!rawArgs) return { fn: match[1], args: [] };
+    const parts = rawArgs.match(/'[^']*'|"[^"]*"|[^,]+/g) || [];
+    const args = [];
+    for (const part of parts) {
+      const token = part.trim();
+      if (/^'[^']*'$/.test(token) || /^"[^"]*"$/.test(token)) args.push(token.slice(1, -1));
+      else if (/^-?\d+(?:\.\d+)?$/.test(token)) args.push(Number(token));
+      else if (token === 'true' || token === 'false') args.push(token === 'true');
+      else if (token === 'null') args.push(null);
+      else return null; // 해석할 수 없는 인자가 있으면 포기한다
+    }
+    return { fn: match[1], args };
+  }
+
+  function invokePageFunction(call) {
+    if (!call?.fn) return { ok: false, message: '호출할 함수를 해석하지 못했습니다.' };
+    const token = `${Date.now()}-${Math.random()}`;
+    try { document.documentElement.removeAttribute(INVOKE_RESULT_ATTR); } catch (_) {}
+    try {
+      document.dispatchEvent(new CustomEvent(INVOKE_EVENT, {
+        detail: { fn: call.fn, args: call.args, token }
+      }));
+    } catch (error) {
+      return { ok: false, message: error?.message || String(error) };
+    }
+    let raw = '';
+    try { raw = document.documentElement.getAttribute(INVOKE_RESULT_ATTR) || ''; } catch (_) {}
+    if (!raw) return { ok: false, message: '페이지 함수 호출 다리가 응답하지 않았습니다.' };
+    try {
+      const result = JSON.parse(raw);
+      if (result.token !== token) return { ok: false, message: '함수 호출 결과가 일치하지 않습니다.' };
+      return { ok: result.ok === true, message: result.message || '' };
+    } catch (error) {
+      return { ok: false, message: error?.message || String(error) };
+    }
+  }
+
   function clickTarget(element) {
     if (!element) return false;
     const target = element.matches?.('img,span') ? (element.closest('a,button') || element) : element;
     target.scrollIntoView?.({ block: 'center', inline: 'center' });
+    // href 가 javascript: 인 링크는 click() 이 CSP로 차단되므로 함수를 직접 부른다.
+    const href = String(target.getAttribute?.('href') || '');
+    if (/^\s*javascript\s*:/i.test(href)) {
+      const call = parseSimpleCall(href);
+      if (call) {
+        const invoked = invokePageFunction(call);
+        if (invoked.ok) return true;
+      }
+      // 해석하지 못했거나 실패하면 onclick 쪽을 시도한다.
+      const onclickCall = parseSimpleCall(target.getAttribute?.('onclick') || '');
+      if (onclickCall && invokePageFunction(onclickCall).ok) return true;
+    }
     target.click();
     return true;
   }
@@ -929,6 +995,7 @@
     inspect,
     collectDiagnostics,
     probeSelector,
+    parseSimpleCall,
     sanitizeSchoolName,
     needsSchoolSanitize,
     sanitizeLastSchool,
