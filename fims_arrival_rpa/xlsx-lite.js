@@ -209,6 +209,45 @@
     return students;
   }
 
+  // 다운로드한 '처리결과' 엑셀을 다시 올렸을 때 지난 결과를 읽어온다.
+  // 입국일자 미확인 학생을 골라 별도처리 섹션에 띄우는 데 쓴다.
+  function parsePriorResults(rows) {
+    const header = findHeaderRow(rows, [['성명', '이름'], ['생년월일'], ['학번'], ['처리결과']]);
+    if (!header) return [];
+    const nameColumn = findColumn(header.headers, ['성명', '이름']);
+    const birthDateColumn = findColumn(header.headers, ['생년월일']);
+    const studentNoColumn = findColumn(header.headers, ['학번']);
+    const resultColumn = findColumn(header.headers, ['처리결과']);
+    const arrivalColumn = findColumn(header.headers, ['확인된 입국일자', '입국일자']);
+    const noteColumn = findColumn(header.headers, ['비고', '메모']);
+    const detailColumn = findColumn(header.headers, ['상세메시지', '상세']);
+    const stageColumn = findColumn(header.headers, ['단계']);
+    const processedColumn = findColumn(header.headers, ['처리일시']);
+
+    const entries = [];
+    rows.slice(header.index + 1).forEach((row) => {
+      const name = normalizeText(row?.[nameColumn]);
+      const rawBirthDate = row?.[birthDateColumn];
+      const no = studentNo(row?.[studentNoColumn]);
+      const result = normalizeText(row?.[resultColumn]);
+      if (!name || !rawBirthDate || !no || !result) return;
+      let birthDate = '';
+      try { birthDate = dateDigits(rawBirthDate, '처리결과 생년월일'); } catch (_) { return; }
+      entries.push({
+        name,
+        birthDate,
+        studentNo: no,
+        result,
+        stage: stageColumn >= 0 ? normalizeText(row?.[stageColumn]) : '',
+        arrivalDate: arrivalColumn >= 0 ? normalizeText(row?.[arrivalColumn]) : '',
+        note: noteColumn >= 0 ? normalizeText(row?.[noteColumn]) : '',
+        detail: detailColumn >= 0 ? normalizeText(row?.[detailColumn]) : '',
+        processedAt: processedColumn >= 0 ? normalizeText(row?.[processedColumn]) : ''
+      });
+    });
+    return entries;
+  }
+
   async function parseWorkbook(file) {
     if (!file || !/\.xlsx$/i.test(file.name || '')) throw new Error('.xlsx 파일을 선택하세요.');
     const bytes = await file.arrayBuffer();
@@ -218,16 +257,18 @@
     if (missing.length) throw new Error(`필수 시트가 없습니다: ${missing.join(', ')}`);
 
     const strings = await sharedStrings(zip);
-    const [configRows, studentRows] = await Promise.all([
+    const [configRows, studentRows, resultRows] = await Promise.all([
       sheetRows(zip, sheets.get('실행설정'), strings),
-      sheetRows(zip, sheets.get('입국신고명단'), strings)
+      sheetRows(zip, sheets.get('입국신고명단'), strings),
+      sheetRows(zip, sheets.get('처리결과'), strings)
     ]);
 
     return {
       originalBytes: bytes,
       fileName: file.name,
       config: parseConfig(configRows),
-      students: parseStudents(studentRows)
+      students: parseStudents(studentRows),
+      priorResults: parsePriorResults(resultRows)
     };
   }
 
@@ -328,6 +369,7 @@
   }
 
   globalThis.FimsXlsx = {
+    parsePriorResults,
     parseWorkbook,
     exportResults
   };

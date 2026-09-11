@@ -15,3 +15,7 @@ credentials*
 
 # 빌드/의존성
 node_modules/
+
+# 수정대상자 수집본: URL에 외국인등록번호·여권번호가 포함돼 커밋하지 않음
+reference/*수정대상자*
+reference/*ICRM*

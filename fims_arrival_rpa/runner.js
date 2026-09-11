@@ -13,6 +13,9 @@ const elements = {
   startButton: document.getElementById('startButton'),
   focusButton: document.getElementById('focusButton'),
   downloadButton: document.getElementById('downloadButton'),
+  recheckButton: document.getElementById('recheckButton'),
+  recheckBody: document.getElementById('recheckBody'),
+  recheckCounts: document.getElementById('recheckCounts'),
   resultsBody: document.getElementById('resultsBody'),
   resultCounts: document.getElementById('resultCounts'),
   runBadge: document.getElementById('runBadge'),
@@ -109,6 +112,9 @@ function updateButtons() {
   elements.focusButton.disabled = state.busy || !state.tabId;
   elements.diagnoseButton.disabled = state.busy || !hasWorkbook || !hasCredentials;
   elements.diagnoseReportButton.disabled = state.busy || !state.diagnostics;
+  elements.recheckButton.disabled = state.busy || !hasCredentials || !state.results.some(
+    (item) => RECHECK_RESULTS.includes(String(item.result || '').trim())
+  );
   elements.downloadButton.disabled = state.busy || !hasWorkbook || !state.results.length;
   elements.fileInput.disabled = state.busy;
   elements.userId.disabled = state.busy;
@@ -177,21 +183,149 @@ async function persistRunState() {
   } catch (_) {}
 }
 
-function initializeResults(students) {
-  state.results = students.map((student) => ({
-    sequence: student.sequence,
-    name: student.name,
-    birthDate: student.birthDate,
-    studentNo: student.studentNo,
-    stage: '대기',
-    result: '대기',
-    arrivalDate: '',
-    note: student.note || '',
-    detail: '',
-    processedAt: ''
-  }));
+const resultKey = (item) =>
+  `${String(item.name || '').normalize('NFKC').replace(/[,，]+/g, ' ').replace(/\s+/g, ' ').trim().toUpperCase()}|` +
+  `${String(item.birthDate || '').replace(/\D/g, '')}|${String(item.studentNo || '').replace(/\D/g, '')}`;
+
+// 처리결과 엑셀을 다시 올리면 지난 실행 결과를 그대로 이어받는다.
+// 그래야 입국일자 미확인 학생만 골라 별도처리를 이어서 돌릴 수 있다.
+function initializeResults(students, priorResults = []) {
+  const prior = new Map((priorResults || []).map((item) => [resultKey(item), item]));
+  let restored = 0;
+  state.results = students.map((student) => {
+    const base = {
+      sequence: student.sequence,
+      name: student.name,
+      birthDate: student.birthDate,
+      studentNo: student.studentNo,
+      stage: '대기',
+      result: '대기',
+      arrivalDate: '',
+      note: student.note || '',
+      detail: '',
+      processedAt: ''
+    };
+    const previous = prior.get(resultKey(student));
+    if (!previous) return base;
+    restored += 1;
+    return {
+      ...base,
+      stage: previous.stage || base.stage,
+      result: previous.result || base.result,
+      arrivalDate: previous.arrivalDate || '',
+      note: previous.note || base.note,
+      detail: previous.detail || '',
+      processedAt: previous.processedAt || ''
+    };
+  });
   state.tabId = null;
   renderResults();
+  renderRecheck();
+  return restored;
+}
+
+// 입국일자가 확인되지 않은 학생만 별도처리 대상이다.
+// 조회 실패·신원 불일치처럼 원인이 다른 항목은 여기서 다루지 않는다.
+const RECHECK_RESULTS = ['입국일자 미확인', '별도 처리 필요'];
+
+function recheckTargets() {
+  return state.results.filter((item) => RECHECK_RESULTS.includes(String(item.result || '').trim()));
+}
+
+function renderRecheck() {
+  const targets = recheckTargets();
+  elements.recheckBody.replaceChildren();
+  if (!targets.length) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 7;
+    cell.className = 'empty';
+    cell.textContent = '입국일자 미확인 학생이 생기면 여기에 표시됩니다.';
+    row.appendChild(cell);
+    elements.recheckBody.appendChild(row);
+    elements.recheckCounts.textContent = '별도처리 대상 0명';
+    updateButtons();
+    return;
+  }
+  for (const item of targets) {
+    const row = document.createElement('tr');
+    [item.sequence, item.name, item.birthDate, item.studentNo, item.result, item.arrivalDate, item.detail]
+      .forEach((value, index) => {
+        const cell = document.createElement('td');
+        cell.textContent = value ?? '';
+        if (index === 4) cell.className = resultClass(String(value || ''));
+        row.appendChild(cell);
+      });
+    elements.recheckBody.appendChild(row);
+  }
+  const done = targets.filter((item) => item.result === '입국신고 완료').length;
+  elements.recheckCounts.textContent = `별도처리 대상 ${targets.length}명${done ? ` · 완료 ${done}명` : ''}`;
+  updateButtons();
+}
+
+async function runRecheck() {
+  const targets = recheckTargets();
+  if (!targets.length || state.busy) return;
+  const userId = elements.userId.value.trim();
+  const password = elements.password.value;
+  if (!userId || !password) {
+    toast('FIMS 사용자 ID와 비밀번호를 입력하세요.', 'error');
+    return;
+  }
+
+  setBusy(true, '별도처리 중');
+  try {
+    log('입국일자 미확인 학생을 재학생정보 수정대상자 화면에서 처리합니다.', 'INFO');
+    log('성명·생년월일·학번이 모두 일치하는 행이 정확히 1건일 때만 진행하며, 애매하면 건너뛰고 기록만 남깁니다.', 'INFO');
+    const login = await command('OPEN_OR_LOGIN', { userId, password });
+    state.tabId = login.tabId;
+    log(login.message, 'OK');
+
+    const total = targets.length;
+    for (let index = 0; index < total; index += 1) {
+      const target = targets[index];
+      const student = {
+        sequence: target.sequence,
+        name: target.name,
+        birthDate: target.birthDate,
+        studentNo: target.studentNo
+      };
+      setBadge(`별도처리 ${index + 1}/${total}`, 'running');
+      log(`[별도처리 ${index + 1}/${total}] ${target.name} / ${target.birthDate} / ${target.studentNo}`);
+      updateResult(student, { stage: '별도처리 중', result: '처리 중', detail: '', processedAt: nowKst() });
+      try {
+        const outcome = await command('RECHECK_ARRIVAL', { tabId: state.tabId, student });
+        updateResult(student, {
+          stage: outcome.code === 'RECHECK_COMPLETED' ? '별도처리 완료' : '별도처리 중단',
+          result: outcome.result,
+          arrivalDate: outcome.arrivalDate || '',
+          note: [target.note, outcome.note].filter(Boolean).join(' / '),
+          detail: outcome.detail || '',
+          processedAt: nowKst()
+        });
+        log(`[별도처리 ${index + 1}/${total}] ${outcome.result}: ${outcome.detail || ''}`,
+          outcome.code === 'RECHECK_COMPLETED' ? 'OK' : 'WARN');
+      } catch (error) {
+        updateResult(student, {
+          stage: '별도처리 중단', result: '별도 처리 필요',
+          detail: error.message || String(error), processedAt: nowKst()
+        });
+        log(`[별도처리 ${index + 1}/${total}] 실패: ${error.message || error}`, 'ERROR');
+      }
+      renderRecheck();
+    }
+
+    const remaining = recheckTargets().filter((item) => item.result !== '입국신고 완료').length;
+    setBadge(remaining ? '별도처리 일부 확인 필요' : '별도처리 완료', remaining ? 'error' : 'success');
+    log(`별도처리 종료: 남은 확인 필요 ${remaining}명`, remaining ? 'WARN' : 'OK');
+  } catch (error) {
+    log(error.message, 'ERROR');
+    setBadge('별도처리 오류', 'error');
+    toast(error.message, 'error');
+  } finally {
+    setBusy(false);
+    renderRecheck();
+  }
 }
 
 function updateResult(student, patch) {
@@ -199,6 +333,7 @@ function updateResult(student, patch) {
   if (!result) return;
   Object.assign(result, patch);
   renderResults();
+  renderRecheck();
   void persistRunState();
 }
 
@@ -234,11 +369,16 @@ async function validateWorkbook() {
     log(`엑셀 파일 검사 시작: ${file.name}`);
     const workbook = await FimsXlsx.parseWorkbook(file);
     state.workbook = workbook;
-    initializeResults(workbook.students);
+    const restored = initializeResults(workbook.students, workbook.priorResults);
     renderFileSummary();
     elements.fileName.textContent = file.name;
     log(`파일 검사 완료: 대상 ${workbook.students.length}명`, 'OK');
     log(`입학(복학)일자 ${workbook.config.admissionDate}`, 'OK');
+    if (restored) {
+      log(`처리결과 탭에서 지난 실행 결과 ${restored}명분을 불러왔습니다.`, 'OK');
+      const pending = recheckTargets().length;
+      if (pending) log(`입국일자 미확인 ${pending}명 — 아래 별도처리 섹션에서 이어서 처리할 수 있습니다.`, 'WARN');
+    }
     setBadge('파일 정상', 'success');
     toast('엑셀 구조와 입력값 검사가 완료되었습니다.', 'success');
     await persistRunState();
@@ -248,6 +388,7 @@ async function validateWorkbook() {
     state.tabId = null;
     elements.fileSummary.classList.add('hidden');
     renderResults();
+    renderRecheck();
     log(error.message, 'ERROR');
     setBadge('파일 오류', 'error');
     toast(error.message, 'error');
@@ -506,6 +647,7 @@ elements.focusButton.addEventListener('click', focusFims);
 elements.diagnoseButton.addEventListener('click', runDiagnosis);
 elements.diagnoseReportButton.addEventListener('click', downloadDiagnosisReport);
 elements.downloadButton.addEventListener('click', downloadResults);
+elements.recheckButton.addEventListener('click', runRecheck);
 elements.clearLogButton.addEventListener('click', () => {
   state.logLines = [];
   elements.logOutput.textContent = '로그를 지웠습니다.';
@@ -516,6 +658,11 @@ window.addEventListener('beforeunload', (event) => {
   event.returnValue = '';
 });
 
+// 버전은 manifest 한 곳에서만 관리한다(화면 하드코딩 금지).
+const versionLabel = document.getElementById('appVersion');
+if (versionLabel) versionLabel.textContent = `v${chrome.runtime.getManifest().version}`;
+
 renderResults();
+renderRecheck();
 updateButtons();
 log('대기 중');

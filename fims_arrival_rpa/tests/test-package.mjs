@@ -5,7 +5,7 @@ import path from 'node:path';
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'manifest.json'), 'utf8'));
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.0.7');
+assert.equal(manifest.version, '1.1.0');
 assert.equal(manifest.name, 'FIMS 입국신고 자동화 (Excel)');
 assert.ok(!manifest.permissions.includes('debugger'), '로그인과 저장 처리에 Chrome debugger 권한을 사용하면 안 됩니다.');
 assert.ok(manifest.permissions.includes('cookies'), '새 FIMS 로그인 전에 세션 쿠키를 지울 권한이 필요합니다.');
@@ -72,6 +72,24 @@ assert.match(worker, /readLoginError/, '로그인 버튼 클릭 실패를 실제
 assert.match(worker, /diagnoseArrivalStudent/, '조회 전용 진단 모드가 있어야 합니다.');
 assert.match(runner, /maskStructure/, '진단 리포트는 개인정보를 가려야 합니다.');
 assert.match(runner, /DIAGNOSE_STUDENT/, '실행 화면에 진단 실행 경로가 있어야 합니다.');
+
+// 1.1.0: 입국일자 미확인 별도처리 (재학생정보 수정대상자)
+assert.match(worker, /recheckArrivalStudent/, '별도처리 흐름이 있어야 합니다.');
+assert.match(worker, /ICRMIntlStudInfoPopR/, '수정 팝업 탭을 찾는 경로가 필요합니다.');
+assert.match(content, /nMenuTreeHome8/, '재학생정보 수정대상자 메뉴 셀렉터가 필요합니다.');
+assert.match(content, /fncGetICRMDetail/, '수정(새창열림) 셀렉터가 필요합니다.');
+assert.match(content, /fncSearchIntlStudInfo/, '수정대상자 조회 버튼 셀렉터가 필요합니다.');
+assert.match(content, /applyIcrmUpdate/, '팝업 수정 적용 함수가 필요합니다.');
+assert.match(runner, /RECHECK_ARRIVAL/, '실행 화면에 별도처리 실행 경로가 있어야 합니다.');
+assert.match(runner, /recheckTargets/, '별도처리 대상 선별 로직이 필요합니다.');
+assert.match(xlsx, /parsePriorResults/, '처리결과 탭을 다시 읽을 수 있어야 합니다.');
+
+// 화면 버전은 manifest 에서 읽는다 (하드코딩 금지)
+const runnerHtmlRaw = await fs.readFile(path.join(root, 'runner.html'), 'utf8');
+const popupHtmlRaw = await fs.readFile(path.join(root, 'popup.html'), 'utf8');
+assert.doesNotMatch(runnerHtmlRaw, /v\d+\.\d+\.\d+/, '실행 화면에 버전을 하드코딩하면 안 됩니다.');
+assert.doesNotMatch(popupHtmlRaw, /v\d+\.\d+\.\d+/, '팝업 화면에 버전을 하드코딩하면 안 됩니다.');
+assert.match(runner, /getManifest\(\)\.version/, '실행 화면 버전은 manifest에서 읽어야 합니다.');
 assert.doesNotMatch(worker, /clearLog: index === 0/, '대화상자 로그는 전 프레임에서 지워야 합니다.');
 assert.match(content, /IntlStudBaInfo\(\?:DtlRU\|DtlR\|U\)\\\.xec/, '상세·수정 화면 URL 판정에 DtlRU가 포함돼야 합니다.');
 assert.match(content, /#admsnYmd/);

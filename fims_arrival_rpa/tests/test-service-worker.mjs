@@ -377,3 +377,65 @@ assert.equal(diagnoseNotFound.report.wroteToFims, false);
 for (const forbidden of ['CLICK_ARRIVAL_EDIT', 'FILL_ARRIVAL_EDIT', 'SAVE_ARRIVAL_EDIT']) {
   assert.ok(!diagnoseNotFound.calls.includes(forbidden), `조회 실패 경로에서도 ${forbidden} 금지`);
 }
+
+// ── 별도처리(재학생정보 수정대상자) 안전 계약 ──────────────────────────────
+// 이 흐름은 실제로 FIMS에 값을 쓴다. 대상이 정확히 1건으로 확정되지 않으면
+// 팝업조차 열지 않고 '별도 처리 필요'로 남겨야 한다.
+const recheckAmbiguous = await vm.runInContext(`(async () => {
+  const calls = [];
+  setDialogModeAllFrames = async () => ({armed:1,armedFrameIds:[70]});
+  clearDialogMode = async () => {};
+  getFrames = async () => ([{frameId:70,parentFrameId:-1,url:'x'}]);
+  ensureContentScript = async () => true;
+  openModiObjScreen = async () => ({frameId:70,state:{hasModiObjSearchForm:true}});
+  waitForFrame = async () => ({frameId:70,state:{hasModiObjSearchForm:true}});
+  waitModiObjResult = async () => ({frame:{frameId:70},data:{state:'AMBIGUOUS',matchCount:2,rowCount:5}});
+  findIcrmPopupTab = async () => { calls.push('findIcrmPopupTab'); return null; };
+  sendAction = async (_tabId, _frameId, action) => {
+    calls.push(action);
+    if (action === 'PREPARE_MODIOBJ_SEARCH') return {ok:true,data:{}};
+    return {ok:true};
+  };
+  const outcome = await recheckArrivalStudent({
+    tabId:1, student:{name:'TEST STUDENT',birthDate:'2000.01.02',studentNo:'9511123456'}
+  });
+  return {outcome, calls};
+})()`, context);
+assert.equal(recheckAmbiguous.outcome.result, '별도 처리 필요');
+assert.equal(recheckAmbiguous.outcome.code, 'MODIOBJ_AMBIGUOUS');
+for (const forbidden of ['OPEN_MODIOBJ_ICRM', 'APPLY_ICRM_UPDATE']) {
+  assert.ok(!recheckAmbiguous.calls.includes(forbidden), `대상이 애매하면 ${forbidden} 를 보내면 안 됩니다.`);
+}
+assert.ok(!recheckAmbiguous.calls.includes('findIcrmPopupTab'), '대상이 애매하면 팝업을 열면 안 됩니다.');
+
+// 목록에서 못 찾은 경우에도 동일하게 아무것도 쓰지 않는다
+const recheckNotFound = await vm.runInContext(`(async () => {
+  const calls = [];
+  setDialogModeAllFrames = async () => ({armed:1,armedFrameIds:[71]});
+  clearDialogMode = async () => {};
+  getFrames = async () => ([{frameId:71,parentFrameId:-1,url:'x'}]);
+  ensureContentScript = async () => true;
+  openModiObjScreen = async () => ({frameId:71,state:{hasModiObjSearchForm:true}});
+  waitForFrame = async () => ({frameId:71,state:{hasModiObjSearchForm:true}});
+  waitModiObjResult = async () => ({frame:{frameId:71},data:{state:'NOT_FOUND',matchCount:0,rowCount:3}});
+  sendAction = async (_tabId, _frameId, action) => {
+    calls.push(action);
+    if (action === 'PREPARE_MODIOBJ_SEARCH') return {ok:true,data:{}};
+    return {ok:true};
+  };
+  const outcome = await recheckArrivalStudent({
+    tabId:1, student:{name:'TEST STUDENT',birthDate:'2000.01.02',studentNo:'9511123456'}
+  });
+  return {outcome, calls};
+})()`, context);
+assert.equal(recheckNotFound.outcome.code, 'MODIOBJ_NOT_FOUND');
+assert.equal(recheckNotFound.outcome.result, '별도 처리 필요');
+for (const forbidden of ['OPEN_MODIOBJ_ICRM', 'APPLY_ICRM_UPDATE']) {
+  assert.ok(!recheckNotFound.calls.includes(forbidden), `대상을 못 찾으면 ${forbidden} 금지`);
+}
+
+// 학생 정보가 부족하면 시작조차 하지 않는다
+await assert.rejects(
+  () => vm.runInContext(`recheckArrivalStudent({tabId:1, student:{name:'X'}})`, context),
+  /성명·생년월일·학번/
+);

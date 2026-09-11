@@ -952,6 +952,198 @@ async function diagnoseArrivalStudent({ tabId, student, depth = 'edit' }) {
   return { stoppedAt: filled.ok ? '입력 재현 성공 (저장 안 함)' : `입력 재현 실패: ${filled.message || ''}`, steps, wroteToFims: false };
 }
 
+
+// ── 입국일자 미확인 학생 별도처리 ────────────────────────────────────────────
+// 재학생정보 수정대상자 조회 및 수정(#nMenuTreeHome8) 화면에서 출입국 기록을
+// 연결해 입국일자를 채운다. 정확성 우선 원칙:
+//   - 성명·생년월일·학번이 모두 일치하는 행이 정확히 1건일 때만 진행한다.
+//   - 팝업의 출입국 기록 중 입국일자가 있는 것이 정확히 1건일 때만 수정한다.
+//   - 그 외에는 아무것도 누르지 않고 '별도 처리 필요'로 기록한다.
+const ICRM_POPUP_URL_PATTERN = 'https://fims.hikorea.go.kr/isi/ICRMIntlStudInfoPopR.xec*';
+
+async function findIcrmPopupTab(timeoutMs = 20000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const tabs = await chrome.tabs.query({ url: [ICRM_POPUP_URL_PATTERN] });
+      const ready = tabs.find((tab) => tab.status === 'complete') || tabs[0];
+      if (ready?.id) return ready;
+    } catch (_) {}
+    await sleep(300);
+  }
+  return null;
+}
+
+async function closeTabQuietly(tabId) {
+  if (!Number.isInteger(tabId)) return;
+  try { await chrome.tabs.remove(tabId); } catch (_) {}
+}
+
+async function openModiObjScreen(tabId) {
+  const existing = await waitForFrame(tabId, (state) => state.hasModiObjSearchForm === true, 2500);
+  if (existing) return existing;
+
+  const menuFrame = await waitForFrame(
+    tabId,
+    (state) => state.hasModiObjMenu === true || state.hasStudentInfoParentMenu === true,
+    30000
+  );
+  if (!menuFrame) throw new Error('좌측 메뉴에서 재학생정보 수정대상자 메뉴를 찾지 못했습니다.');
+
+  if (!menuFrame.state?.hasModiObjMenu) {
+    const expanded = await sendAction(tabId, menuFrame.frameId, 'EXPAND_STUDENT_INFO_MENU');
+    if (!expanded.ok) throw new Error(expanded.message || '유학생정보관리 메뉴를 열지 못했습니다.');
+  }
+  const withMenu = await waitForFrame(tabId, (state) => state.hasModiObjMenu === true, 10000, 200);
+  if (!withMenu) throw new Error('재학생정보 수정대상자 메뉴(#nMenuTreeHome8)가 나타나지 않았습니다.');
+
+  const clicked = await sendAction(tabId, withMenu.frameId, 'CLICK_MODIOBJ_MENU');
+  if (!clicked.ok) throw new Error(clicked.message || '재학생정보 수정대상자 메뉴를 클릭하지 못했습니다.');
+
+  const searchFrame = await waitForFrame(tabId, (state) => state.hasModiObjSearchForm === true, 60000);
+  if (!searchFrame) throw new Error('재학생정보 수정대상자 조회화면 진입을 확인하지 못했습니다.');
+  return searchFrame;
+}
+
+async function waitModiObjResult(tabId, student, timeoutMs = 30000) {
+  const started = Date.now();
+  let last = null;
+  while (Date.now() - started < timeoutMs) {
+    const frame = await waitForFrame(tabId, (state) => state.hasModiObjSearchForm === true || state.hasModiObjRows === true, 3000, 250);
+    if (frame) {
+      const response = await sendAction(tabId, frame.frameId, 'READ_MODIOBJ_RESULT', student);
+      if (response.ok) {
+        last = { frame, data: response.data || {} };
+        if (['FOUND', 'AMBIGUOUS'].includes(last.data.state)) return last;
+        if (last.data.state === 'NOT_FOUND' && Date.now() - started >= 3000) return last;
+      }
+    }
+    await sleep(350);
+  }
+  return last || { frame: null, data: { state: 'TIMEOUT' } };
+}
+
+// ICRM 수정 후 유학생기본정보 상세화면에서 입국일자가 실제로 채워졌는지 읽기만 한다.
+async function confirmArrivalAfterRecheck(tabId, student) {
+  try {
+    const searchFrame = await ensureBasicSearchFrame(tabId);
+    const previousToken = String(searchFrame.state?.documentToken || '');
+    const prepared = await sendAction(tabId, searchFrame.frameId, 'PREPARE_ARRIVAL_SEARCH', {
+      name: student.name,
+      birthDate: student.birthDate
+    });
+    if (!prepared.ok) return { ok: false, message: prepared.message || '' };
+    const searchResult = await waitArrivalSearchResult(tabId, student, previousToken, 30000);
+    if (searchResult.data?.state !== 'FOUND') return { ok: false, message: `조회 ${searchResult.data?.state || 'UNKNOWN'}` };
+    const opened = await sendAction(tabId, searchResult.frame.frameId, 'OPEN_ARRIVAL_DETAIL', student);
+    if (!opened.ok) return { ok: false, message: opened.message || '' };
+    const verified = await waitForArrivalVerification(tabId, student, 30000);
+    if (!verified) return { ok: false, message: '상세화면에서 신원을 재검증하지 못했습니다.' };
+    return {
+      ok: verified.data?.arrivalConfirmed === true,
+      arrivalDate: formatDate(verified.data?.arrivalDate || ''),
+      message: verified.data?.arrivalConfirmed === true ? '' : '상세화면에 입국일자가 여전히 표시되지 않습니다.'
+    };
+  } catch (error) {
+    return { ok: false, message: error?.message || String(error) };
+  }
+}
+
+async function recheckArrivalStudent({ tabId, student }) {
+  if (!tabId) throw new Error('먼저 로그인해 FIMS 창을 연 뒤 별도처리를 실행하세요.');
+  if (!student?.name || !student?.birthDate || !student?.studentNo) {
+    throw new Error('별도처리 대상 학생의 성명·생년월일·학번이 모두 필요합니다.');
+  }
+
+  let popupTabId = null;
+  try {
+    // 메뉴 진입 시 안내창이 뜬다: "관서에 등록된 정보와 일치하지 않거나…"
+    await setDialogModeAllFrames(tabId, { confirmValue: true, durationMs: 120000, clearLog: true });
+    await openModiObjScreen(tabId);
+    await setDialogModeAllFrames(tabId, { confirmValue: true, durationMs: 120000, clearLog: false });
+
+    const searchFrame = await waitForFrame(tabId, (state) => state.hasModiObjSearchForm === true, 20000);
+    if (!searchFrame) {
+      return { code: 'MODIOBJ_SCREEN_FAILED', result: '별도 처리 필요', detail: '수정대상자 조회화면을 확인하지 못했습니다.' };
+    }
+    const prepared = await sendAction(tabId, searchFrame.frameId, 'PREPARE_MODIOBJ_SEARCH', student);
+    if (!prepared.ok) {
+      return { code: 'MODIOBJ_SEARCH_FAILED', result: '별도 처리 필요', detail: prepared.message || '수정대상자 조회 실행 실패' };
+    }
+
+    const found = await waitModiObjResult(tabId, student, 30000);
+    const state = found.data?.state || 'TIMEOUT';
+    if (state !== 'FOUND') {
+      const reason = {
+        NOT_FOUND: '수정대상자 목록에서 해당 학생을 찾지 못했습니다.',
+        AMBIGUOUS: `수정대상자 목록에서 동일 조건이 ${found.data?.matchCount || 0}건이라 자동 처리하지 않았습니다.`,
+        TIMEOUT: '수정대상자 조회 결과를 확정하지 못했습니다.'
+      }[state] || `수정대상자 조회 상태 ${state}`;
+      return { code: `MODIOBJ_${state}`, result: '별도 처리 필요', detail: reason };
+    }
+
+    const opened = await sendAction(tabId, found.frame.frameId, 'OPEN_MODIOBJ_ICRM', student);
+    if (!opened.ok) {
+      return { code: 'ICRM_OPEN_FAILED', result: '별도 처리 필요', detail: opened.message || '수정(새창열림) 클릭 실패' };
+    }
+
+    const popupTab = await findIcrmPopupTab(20000);
+    if (!popupTab?.id) {
+      return {
+        code: 'ICRM_POPUP_NOT_FOUND',
+        result: '별도 처리 필요',
+        detail: '수정 팝업 창을 찾지 못했습니다. 브라우저 팝업 차단을 해제한 뒤 다시 시도하세요.'
+      };
+    }
+    popupTabId = popupTab.id;
+    await waitForTabReady(popupTabId, 20000);
+    await setDialogModeAllFrames(popupTabId, { confirmValue: true, durationMs: 120000, clearLog: true });
+
+    const popupFrame = await waitForFrame(popupTabId, (state) => state.hasIcrmPopup === true, 20000);
+    if (!popupFrame) {
+      return { code: 'ICRM_POPUP_EMPTY', result: '별도 처리 필요', detail: '수정 팝업에서 출입국 기록 목록을 확인하지 못했습니다.' };
+    }
+
+    const applied = await sendAction(popupTabId, popupFrame.frameId, 'APPLY_ICRM_UPDATE', student);
+    if (!applied.ok) {
+      return {
+        code: `ICRM_${applied.code || 'FAILED'}`,
+        result: '별도 처리 필요',
+        detail: applied.message || '수정 팝업 처리 실패'
+      };
+    }
+
+    // 팝업이 저장 후 닫힐 수 있다. 잠시 기다린 뒤 남아 있으면 정리한다.
+    await sleep(2500);
+    const popupLogs = await getDialogLogs(popupTabId).catch(() => []);
+    const popupMessages = popupLogs.map((item) => normalizeText(item.message)).filter(Boolean);
+    await closeTabQuietly(popupTabId);
+    popupTabId = null;
+
+    const appliedDate = formatDate(applied.data?.arrivalDate || '');
+    const confirmed = await confirmArrivalAfterRecheck(tabId, student);
+    if (confirmed.ok) {
+      return {
+        code: 'RECHECK_COMPLETED',
+        result: '입국신고 완료',
+        arrivalDate: confirmed.arrivalDate || appliedDate,
+        note: '',
+        detail: `수정대상자 화면에서 출입국 기록 연결 후 입국일자 ${confirmed.arrivalDate || appliedDate} 확인${popupMessages.length ? ` / 알림: ${popupMessages.at(-1)}` : ''}`
+      };
+    }
+    return {
+      code: 'RECHECK_UNVERIFIED',
+      result: '별도 처리 필요',
+      arrivalDate: appliedDate,
+      note: '수정대상자 처리 후에도 입국일자를 확인하지 못했습니다.',
+      detail: `출입국 기록 연결은 실행했으나 확인 실패: ${confirmed.message || ''}${popupMessages.length ? ` / 알림: ${popupMessages.at(-1)}` : ''}`
+    };
+  } finally {
+    await closeTabQuietly(popupTabId);
+    await clearDialogMode(tabId).catch(() => {});
+  }
+}
+
 async function focusFims({ tabId }) {
   const tab = await chrome.tabs.get(tabId);
   await focusTab(tab);
@@ -972,6 +1164,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           break;
         case 'DIAGNOSE_STUDENT':
           result = await diagnoseArrivalStudent(message.payload || {});
+          break;
+        case 'RECHECK_ARRIVAL':
+          result = await recheckArrivalStudent(message.payload || {});
           break;
         case 'FOCUS_FIMS':
           result = await focusFims(message.payload || {});
