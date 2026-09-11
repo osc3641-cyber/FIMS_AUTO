@@ -5,7 +5,7 @@ import path from 'node:path';
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'manifest.json'), 'utf8'));
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.0.5');
+assert.equal(manifest.version, '1.0.6');
 assert.equal(manifest.name, 'FIMS 입국신고 자동화 (Excel)');
 assert.ok(!manifest.permissions.includes('debugger'), '로그인과 저장 처리에 Chrome debugger 권한을 사용하면 안 됩니다.');
 assert.ok(manifest.permissions.includes('cookies'), '새 FIMS 로그인 전에 세션 쿠키를 지울 권한이 필요합니다.');
@@ -65,6 +65,9 @@ assert.match(content, /arrivalConfirmed/, '저장 성공 판정에 arrivalConfir
 assert.match(content, /canVerifyArrival/, 'inspect()가 저장 결과 확인 가능 여부를 알려야 합니다.');
 assert.match(worker, /waitForArrivalVerification/, '저장 후 상세·수정 화면 양쪽에서 결과를 확인해야 합니다.');
 assert.match(worker, /readLoginError/, '로그인 버튼 클릭 실패를 실제로 읽어야 합니다.');
+assert.match(worker, /diagnoseArrivalStudent/, '조회 전용 진단 모드가 있어야 합니다.');
+assert.match(runner, /maskStructure/, '진단 리포트는 개인정보를 가려야 합니다.');
+assert.match(runner, /DIAGNOSE_STUDENT/, '실행 화면에 진단 실행 경로가 있어야 합니다.');
 assert.doesNotMatch(worker, /clearLog: index === 0/, '대화상자 로그는 전 프레임에서 지워야 합니다.');
 assert.match(content, /IntlStudBaInfo\(\?:DtlRU\|DtlR\|U\)\\\.xec/, '상세·수정 화면 URL 판정에 DtlRU가 포함돼야 합니다.');
 assert.match(content, /#admsnYmd/);

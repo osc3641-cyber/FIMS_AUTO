@@ -829,6 +829,92 @@ async function processArrivalStudent({ tabId, student, config }) {
   }
 }
 
+// ── 진단 모드 (조회 전용) ───────────────────────────────────────────────
+// 검색 → 조회결과 → 상세조회까지만 수행하고 수정·저장은 절대 호출하지 않는다.
+// FIMS에 기록을 쓰지 않으므로 실제 계정으로 안전하게 돌려볼 수 있다.
+async function collectFrameDiagnostics(tabId, student) {
+  const frames = await getFrames(tabId);
+  const collected = [];
+  for (const frame of frames) {
+    const ready = await ensureContentScript(tabId, frame.frameId);
+    if (!ready) {
+      collected.push({ frameId: frame.frameId, url: frame.url || '', contentScript: false });
+      continue;
+    }
+    const response = await sendAction(tabId, frame.frameId, 'COLLECT_DIAGNOSTICS', student || {});
+    collected.push({
+      frameId: frame.frameId,
+      parentFrameId: frame.parentFrameId,
+      url: frame.url || '',
+      contentScript: true,
+      ok: response.ok === true,
+      message: response.ok ? '' : (response.message || ''),
+      data: response.ok ? response.data : null
+    });
+  }
+  return collected;
+}
+
+async function diagnoseArrivalStudent({ tabId, student }) {
+  if (!tabId) throw new Error('먼저 로그인해 FIMS 창을 연 뒤 진단하세요.');
+  if (!student?.name || !student?.birthDate) throw new Error('진단할 학생의 성명과 생년월일이 필요합니다.');
+
+  const steps = [];
+  const record = (step, ok, detail, data) => {
+    steps.push({ step, ok, detail: detail || '', data: data ?? null, at: new Date().toISOString() });
+  };
+
+  const searchFrame = await ensureBasicSearchFrame(tabId);
+  record('유학생기본정보 조회화면 진입', true, `frameId=${searchFrame.frameId}`);
+
+  const before = await collectFrameDiagnostics(tabId, student);
+  record('검색 전 화면 상태 수집', true, `프레임 ${before.length}개`, before);
+
+  const previousDocumentToken = String(searchFrame.state?.documentToken || '');
+  const prepared = await sendAction(tabId, searchFrame.frameId, 'PREPARE_ARRIVAL_SEARCH', {
+    name: student.name,
+    birthDate: student.birthDate
+  });
+  record('검색조건 입력 + 조회 클릭', prepared.ok === true, prepared.message || '', prepared.data || null);
+  if (!prepared.ok) {
+    return { stoppedAt: '검색조건 입력', steps, wroteToFims: false };
+  }
+
+  const searchResult = await waitArrivalSearchResult(tabId, student, previousDocumentToken, 30000);
+  const searchState = searchResult.data?.state || 'UNKNOWN';
+  record('조회 결과 판정', !['TIMEOUT', 'WAIT'].includes(searchState), `state=${searchState}`, searchResult.data || null);
+  if (searchState !== 'FOUND') {
+    const after = await collectFrameDiagnostics(tabId, student);
+    record('조회 실패 시점 화면 상태', true, `프레임 ${after.length}개`, after);
+    return { stoppedAt: `조회 결과 ${searchState}`, steps, wroteToFims: false };
+  }
+
+  const opened = await sendAction(tabId, searchResult.frame.frameId, 'OPEN_ARRIVAL_DETAIL', student);
+  record('상세조회 링크 클릭', opened.ok === true, opened.message || '', { matchStrategy: opened.matchStrategy || '' });
+  if (!opened.ok) {
+    return { stoppedAt: '상세조회 클릭', steps, wroteToFims: false };
+  }
+
+  const detailFrame = await waitForDetailFrame(tabId, 30000);
+  record('상세화면 진입', Boolean(detailFrame), detailFrame ? `frameId=${detailFrame.frameId}` : '상세화면을 확인하지 못했습니다.');
+  if (!detailFrame) {
+    const after = await collectFrameDiagnostics(tabId, student);
+    record('상세화면 미확인 시점 상태', true, `프레임 ${after.length}개`, after);
+    return { stoppedAt: '상세화면 진입', steps, wroteToFims: false };
+  }
+
+  const identity = await sendAction(tabId, detailFrame.frameId, 'READ_DETAIL_IDENTITY', student);
+  const verified = identity.ok && identityVerified(identity.data, student);
+  record('상세화면 신원 재검증', verified, verified ? '' : '성명·생년월일이 엑셀 대상과 일치하지 않습니다.', identity.data || null);
+
+  const detailDiagnostics = await collectFrameDiagnostics(tabId, student);
+  record('상세화면 상태 수집', true, `프레임 ${detailDiagnostics.length}개`, detailDiagnostics);
+
+  // 여기서 끝낸다. CLICK_ARRIVAL_EDIT / FILL_ARRIVAL_EDIT / SAVE_ARRIVAL_EDIT 는 호출하지 않는다.
+  record('진단 종료 (수정·저장 미실행)', true, 'FIMS에 아무것도 기록하지 않았습니다.');
+  return { stoppedAt: '상세화면 확인 완료', steps, wroteToFims: false };
+}
+
 async function focusFims({ tabId }) {
   const tab = await chrome.tabs.get(tabId);
   await focusTab(tab);
@@ -846,6 +932,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           break;
         case 'PROCESS_STUDENT':
           result = await processArrivalStudent(message.payload || {});
+          break;
+        case 'DIAGNOSE_STUDENT':
+          result = await diagnoseArrivalStudent(message.payload || {});
           break;
         case 'FOCUS_FIMS':
           result = await focusFims(message.payload || {});

@@ -290,3 +290,63 @@ assert.equal(missingDateFlow.result, '입국일자 미확인');
 assert.match(missingDateFlow.note, /별도 처리 필요/);
 
 console.log('arrival service-worker tests passed');
+
+// ── 진단 모드 안전 속성 ────────────────────────────────────────────────
+// 진단은 실제 FIMS 계정으로 돌리므로, 수정·저장 계열 명령을 단 한 번도
+// 보내지 않아야 한다. 이 테스트가 그 계약을 잠근다.
+const diagnoseFlow = await vm.runInContext(`(async () => {
+  const calls = [];
+  ensureBasicSearchFrame = async () => ({frameId:40,state:{documentToken:'old'}});
+  getFrames = async () => ([{frameId:40,parentFrameId:-1,url:'https://fims.hikorea.go.kr/isi/IntlStudBaInfoPageR.xec'}]);
+  ensureContentScript = async () => true;
+  waitArrivalSearchResult = async () => ({frame:{frameId:40},data:{state:'FOUND',matchCount:1}});
+  waitForDetailFrame = async () => ({frameId:41,state:{hasStudentDetailView:true}});
+  sendAction = async (_tabId, frameId, action) => {
+    calls.push(action);
+    if (action === 'COLLECT_DIAGNOSTICS') return {ok:true,data:{probes:[],hasBasicSearchForm:true}};
+    if (action === 'READ_DETAIL_IDENTITY') return {ok:true,data:{nameMatches:true,birthDateMatches:true}};
+    if (action === 'OPEN_ARRIVAL_DETAIL') return {ok:true,matchStrategy:'name-match'};
+    return {ok:true};
+  };
+  const report = await diagnoseArrivalStudent({
+    tabId:1,
+    student:{name:'TEST STUDENT',birthDate:'2000.01.02',studentNo:'9511123456'}
+  });
+  return {report, calls};
+})()`, context);
+
+assert.equal(diagnoseFlow.report.wroteToFims, false);
+assert.equal(diagnoseFlow.report.stoppedAt, '상세화면 확인 완료');
+for (const forbidden of ['CLICK_ARRIVAL_EDIT', 'FILL_ARRIVAL_EDIT', 'SAVE_ARRIVAL_EDIT']) {
+  assert.ok(
+    !diagnoseFlow.calls.includes(forbidden),
+    `진단 모드가 쓰기 명령 ${forbidden} 을 보내면 안 됩니다.`
+  );
+}
+assert.ok(diagnoseFlow.calls.includes('PREPARE_ARRIVAL_SEARCH'));
+assert.ok(diagnoseFlow.calls.includes('OPEN_ARRIVAL_DETAIL'));
+assert.ok(diagnoseFlow.calls.includes('READ_DETAIL_IDENTITY'));
+assert.ok(diagnoseFlow.report.steps.some((step) => step.step.includes('수정·저장 미실행')));
+
+// 조회 실패로 끝나도 쓰기 명령은 없어야 한다
+const diagnoseNotFound = await vm.runInContext(`(async () => {
+  const calls = [];
+  ensureBasicSearchFrame = async () => ({frameId:50,state:{documentToken:'old'}});
+  getFrames = async () => ([{frameId:50,parentFrameId:-1,url:'x'}]);
+  ensureContentScript = async () => true;
+  waitArrivalSearchResult = async () => ({frame:{frameId:50},data:{state:'NONE'}});
+  sendAction = async (_tabId, _frameId, action) => {
+    calls.push(action);
+    if (action === 'COLLECT_DIAGNOSTICS') return {ok:true,data:{}};
+    return {ok:true};
+  };
+  const report = await diagnoseArrivalStudent({
+    tabId:1, student:{name:'TEST STUDENT',birthDate:'2000.01.02',studentNo:'9511123456'}
+  });
+  return {report, calls};
+})()`, context);
+assert.match(diagnoseNotFound.report.stoppedAt, /조회 결과 NONE/);
+assert.equal(diagnoseNotFound.report.wroteToFims, false);
+for (const forbidden of ['CLICK_ARRIVAL_EDIT', 'FILL_ARRIVAL_EDIT', 'SAVE_ARRIVAL_EDIT']) {
+  assert.ok(!diagnoseNotFound.calls.includes(forbidden), `조회 실패 경로에서도 ${forbidden} 금지`);
+}

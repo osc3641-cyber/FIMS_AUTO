@@ -407,9 +407,78 @@
     return { ok: true };
   }
 
+  // 진단 모드: 각 화면에서 자동화가 의존하는 요소가 실제로 어떤 상태인지 수집한다.
+  // 값 자체는 담지 않고(개인정보), 존재·표시·잠금·길이만 본다.
+  const DIAGNOSTIC_SELECTORS = [
+    ['로그인 ID', '#userId'],
+    ['로그인 비밀번호', '#userPasswd'],
+    ['로그인 버튼', 'input[name="Button2"]'],
+    ['유학생정보관리 메뉴', '#nMenuTreeHome6'],
+    ['유학생기본정보 메뉴', '#nMenuTreeHome7'],
+    ['검색 성명', '#sEkNm'],
+    ['검색 생년월일', '#sBirthYmd'],
+    ['검색 유사체크', '#sLikeYn'],
+    ['조회 버튼', 'a[onclick*="fncSearchPage"]'],
+    ['상세조회 링크', 'a[title="상세조회"]'],
+    ['상세조회 폴백', 'a[onclick*="fncGetDetail"]'],
+    ['수정 링크', 'a[title="수정"]'],
+    ['수정 폴백', 'a[onclick*="fncUpdate"]'],
+    ['상세 성명', '#ekNm'],
+    ['상세 생년월일', '#birthYmd'],
+    ['학번', '#scholNo'],
+    ['입국여부 콤보', '#entrYN'],
+    ['입학(복학)일자', '#admsnYmd'],
+    ['입국일자(읽기전용)', '#eYmd'],
+    ['저장 버튼', 'a[onclick*="fncSave"]']
+  ];
+
+  function probeSelector(label, selector) {
+    const element = document.querySelector(selector);
+    if (!element) return { label, selector, found: false };
+    const value = String(element.value ?? '');
+    const info = {
+      label,
+      selector,
+      found: true,
+      tag: String(element.tagName || '').toLowerCase(),
+      type: String(element.type || ''),
+      visible: isVisible(element),
+      disabled: Boolean(element.disabled),
+      readOnly: Boolean(element.readOnly),
+      valueLength: value.length
+    };
+    if (Number.isInteger(element.maxLength) && element.maxLength >= 0) info.maxLength = element.maxLength;
+    if (typeof element.checked === 'boolean') info.checked = element.checked;
+    if (element.options) {
+      info.optionCount = element.options.length;
+      info.selectedValue = String(element.value ?? '');
+      info.selectedText = normalizeText(element.options[element.selectedIndex]?.text || '');
+      info.optionTexts = [...element.options].map((option) => normalizeText(option.text)).slice(0, 10);
+    }
+    return info;
+  }
+
+  function collectDiagnostics(payload = {}) {
+    const state = inspect();
+    const links = detailLinks();
+    return {
+      ...state,
+      probes: DIAGNOSTIC_SELECTORS.map(([label, selector]) => probeSelector(label, selector)),
+      searchCriteria: currentSearchCriteria(),
+      detailLinkCount: links.length,
+      detailLinkNames: links.map((link) => linkStudentName(link)).slice(0, 10),
+      searchResult: state.hasBasicSearchForm && payload.name ? readArrivalSearchResult(payload) : null,
+      detailData: (state.hasStudentDetailView || state.hasArrivalEditForm) && payload.name
+        ? readDetailData(payload)
+        : null,
+      bodyTextLength: String(document.body?.innerText || '').length
+    };
+  }
+
   function respond(action, payload) {
     switch (action) {
       case 'INSPECT': return { ok: true, data: inspect() };
+      case 'COLLECT_DIAGNOSTICS': return { ok: true, data: collectDiagnostics(payload) };
       case 'EXPAND_STUDENT_INFO_MENU': return expandStudentInfoMenu();
       case 'CLICK_STUDENT_BASIC_MENU': return clickStudentBasicMenu();
       case 'PREPARE_ARRIVAL_SEARCH': return prepareArrivalSearch(payload);
@@ -441,6 +510,8 @@
     openArrivalDetail,
     readDetailData,
     fillArrivalEdit,
-    inspect
+    inspect,
+    collectDiagnostics,
+    probeSelector
   };
 })();
