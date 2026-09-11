@@ -468,6 +468,37 @@
     return `${selector}(${parts.join(', ')})`;
   }
 
+  // FIMS 저장 검증: "최종출신학교에 -,(,),. 이외의 특수문자를 입력하실 수 없습니다."
+  // 기존 데이터에 쉼표 등이 들어 있으면 우리가 그 칸을 건드리지 않아도 저장이 거부된다.
+  // 허용되지 않는 문자만 공백으로 바꾸고 연속 공백을 정리한다. 학교명 자체는 그대로 둔다.
+  //   University of Applied Sciences, Worms -> University of Applied Sciences Worms
+  // 글자(한글·영문·한자 등)와 숫자는 모두 남긴다.
+  const SCHOOL_DISALLOWED = /[^\p{L}\p{N}\s\-().]/gu;
+
+  function sanitizeSchoolName(value) {
+    return String(value ?? '').replace(SCHOOL_DISALLOWED, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function needsSchoolSanitize(value) {
+    const original = String(value ?? '');
+    return Boolean(original.trim()) && sanitizeSchoolName(original) !== original.replace(/\s+/g, ' ').trim();
+  }
+
+  // 수정화면에서만 호출한다. 값이 실제로 문제가 있을 때만 고치고, 그 외에는 손대지 않는다.
+  function sanitizeLastSchool() {
+    const field = document.querySelector('#lastOriSchol, input[name="lastOriSchol"]');
+    if (!field) return { changed: false, reason: 'no-field' };
+    const original = String(field.value ?? '');
+    if (!needsSchoolSanitize(original)) return { changed: false, original };
+    const cleaned = sanitizeSchoolName(original);
+    if (!cleaned) return { changed: false, original, reason: 'would-empty' };
+    setNativeValue(field, cleaned);
+    const applied = String(document.querySelector('#lastOriSchol, input[name="lastOriSchol"]')?.value ?? '');
+    if (applied !== cleaned) setNativeValueQuiet(document.querySelector('#lastOriSchol, input[name="lastOriSchol"]'), cleaned);
+    const finalValue = String(document.querySelector('#lastOriSchol, input[name="lastOriSchol"]')?.value ?? '');
+    return { changed: finalValue === cleaned, original, cleaned, finalValue };
+  }
+
   function fillArrivalEdit(payload) {
     const identity = readDetailData(payload);
     if (!identity.nameMatches || !identity.birthDateMatches) return { ok: false, message: '수정화면의 성명·생년월일이 엑셀 대상과 일치하지 않습니다.' };
@@ -493,6 +524,10 @@
       setNativeValueQuiet(element, expectedValue);
       return { element: document.querySelector(selector), retried: true };
     };
+
+    // FIMS는 저장 시 폼 전체를 검증한다. 최종출신학교에 허용되지 않는 특수문자가
+    // 남아 있으면 우리가 넣은 값과 무관하게 저장이 거부된다.
+    const schoolFix = sanitizeLastSchool();
 
     const studentNoResult = settle('#scholNo', expectedStudentNo, (el) => digits(el.value) === expectedStudentNo);
     const admissionResult = settle('#admsnYmd', expectedAdmissionDate, (el) => digits(el.value) === digits(expectedAdmissionDate));
@@ -529,7 +564,10 @@
         admissionDate: admissionDate.value,
         immigrationArrivalDate: normalizeText(document.querySelector('#eYmd')?.value || ''),
         retriedStudentNo: studentNoResult.retried,
-        retriedAdmissionDate: admissionResult.retried
+        retriedAdmissionDate: admissionResult.retried,
+        schoolSanitized: schoolFix.changed === true,
+        schoolBefore: schoolFix.changed ? schoolFix.original : '',
+        schoolAfter: schoolFix.changed ? schoolFix.cleaned : ''
       }
     };
   }
@@ -644,6 +682,21 @@
       .map((link, index) => ({ index, link, row: link.closest('tr') }));
   }
 
+  // 수정대상자 목록은 성명·생년월일·외국인등록번호·여권번호를 입력칸(<input>)으로
+  // 보여준다(행별로 #sEkNm0, #sbirthYmd0 …). innerText 에는 이 값들이 없으므로
+  // 행 안의 입력값까지 함께 모아야 대상 학생을 찾을 수 있다.
+  function rowSearchText(row) {
+    if (!row) return '';
+    const text = normalizeText(row.innerText || row.textContent || '');
+    const values = [...row.querySelectorAll('input,select,textarea')]
+      .map((field) => normalizeText(field.value || ''))
+      .filter(Boolean);
+    const titles = [...row.querySelectorAll('[title]')]
+      .map((node) => normalizeText(node.getAttribute('title') || ''))
+      .filter(Boolean);
+    return normalizeText([text, ...values, ...titles].join(' '));
+  }
+
   // 엑셀 명단의 그 학생 행만 고른다. 화면에 함께 떠 있는 다른 학생은 절대 건드리지 않는다.
   // 성명과 생년월일은 반드시 일치해야 하고, 행에 학번이 있으면 학번까지 일치해야 한다.
   function matchModiObjRows(payload) {
@@ -651,7 +704,7 @@
     const expectedBirth = digits(payload.birthDate);
     const expectedStudentNo = digits(payload.studentNo);
     return modiObjRows().filter(({ row }) => {
-      const text = normalizeText(row?.innerText || row?.textContent || '');
+      const text = rowSearchText(row);
       if (!text) return false;
       if (!expectedName || !normalizeName(text).includes(expectedName)) return false;
       if (!expectedBirth || !containsDateToken(text, expectedBirth)) return false;
@@ -745,10 +798,10 @@
   function readIcrmCandidates(payload = {}) {
     const radios = [...document.querySelectorAll(MODIOBJ.candidateRadio)];
     const expectedName = normalizeFimsName(payload.name || '');
-    const bodyText = normalizeText(document.body?.innerText || '');
+    const bodyText = rowSearchText(document.body);
     const candidates = radios.map((radio, index) => {
       const row = radio.closest('tr');
-      const text = normalizeText(row?.innerText || row?.textContent || '');
+      const text = rowSearchText(row);
       return {
         index,
         title: normalizeText(radio.title || ''),
@@ -847,9 +900,13 @@
     inspect,
     collectDiagnostics,
     probeSelector,
+    sanitizeSchoolName,
+    needsSchoolSanitize,
+    sanitizeLastSchool,
     containsDateToken,
     datesIn,
     matchModiObjRows,
+    rowSearchText,
     readModiObjResult,
     readIcrmCandidates,
     applyIcrmUpdate

@@ -757,6 +757,10 @@ async function processArrivalStudent({ tabId, student, config }) {
   if (!filled.ok) {
     return { code: 'FILL_FAILED', result: '입국정보 입력 실패', detail: filled.message || '입력값 검증 실패' };
   }
+  // 최종출신학교에 FIMS가 허용하지 않는 특수문자가 있어 정리한 경우 기록에 남긴다.
+  const schoolNote = filled.data?.schoolSanitized
+    ? ` / 최종출신학교 특수문자 정리: "${filled.data.schoolBefore}" → "${filled.data.schoolAfter}"`
+    : '';
 
   const saveGuard = await setDialogModeAllFrames(tabId, { confirmValue: true, durationMs: 90000, clearLog: true });
   if (!saveGuard.armedFrameIds.includes(editFrame.frameId)) {
@@ -800,7 +804,7 @@ async function processArrivalStudent({ tabId, student, config }) {
         result: '입국정보 저장 실패',
         arrivalDate: '',
         note: 'FIMS가 저장을 거부했습니다. 화면에서 직접 확인하세요.',
-        detail: `FIMS 알림: ${outcome.message}`
+        detail: `FIMS 알림: ${outcome.message}${schoolNote}`
       };
     }
     if (outcome.state === 'NOT_EXECUTED') {
@@ -840,7 +844,7 @@ async function processArrivalStudent({ tabId, student, config }) {
         result: '입국신고 완료',
         arrivalDate,
         note: '',
-        detail: `학번·입국·입학일자 저장 완료 / ${arrivalDate} (입국) 확인${verification.data?.arrivalMarked === true ? '' : ' (수정화면 입국일자 기준)'}${dialogMessages.length ? ` / 알림: ${dialogMessages.at(-1)}` : ''}`
+        detail: `학번·입국·입학일자 저장 완료 / ${arrivalDate} (입국) 확인${verification.data?.arrivalMarked === true ? '' : ' (수정화면 입국일자 기준)'}${schoolNote}${dialogMessages.length ? ` / 알림: ${dialogMessages.at(-1)}` : ''}`
       };
     }
 
@@ -849,7 +853,7 @@ async function processArrivalStudent({ tabId, student, config }) {
       result: '입국일자 미확인',
       arrivalDate: '',
       note: '상세화면에 입국일자가 표시되지 않아 별도 처리 필요',
-      detail: `저장 완료 알림은 확인했으나 상세화면에 입국일자가 표시되지 않았습니다(관서 출입국 기록 미연결로 보임).${dialogMessages.length ? ` 알림: ${dialogMessages.at(-1)}` : ''}`
+      detail: `저장 완료 알림은 확인했으나 상세화면에 입국일자가 표시되지 않았습니다(관서 출입국 기록 미연결로 보임).${schoolNote}${dialogMessages.length ? ` 알림: ${dialogMessages.at(-1)}` : ''}`
     };
   } catch (error) {
     return {

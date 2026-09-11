@@ -5,7 +5,7 @@ import path from 'node:path';
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'manifest.json'), 'utf8'));
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.1.1');
+assert.equal(manifest.version, '1.2.0');
 assert.equal(manifest.name, 'FIMS 입국신고 자동화 (Excel)');
 assert.ok(!manifest.permissions.includes('debugger'), '로그인과 저장 처리에 Chrome debugger 권한을 사용하면 안 됩니다.');
 assert.ok(manifest.permissions.includes('cookies'), '새 FIMS 로그인 전에 세션 쿠키를 지울 권한이 필요합니다.');
@@ -90,6 +90,12 @@ assert.match(worker, /isSaveSuccessMessage/, 'FIMS 저장 성공 알림을 판�
 assert.match(worker, /SAVE_NOT_EXECUTED/, '저장이 실행되지 않은 경우를 구분해야 합니다.');
 assert.match(worker, /SAVE_REJECTED/, 'FIMS가 저장을 거부한 경우를 구분해야 합니다.');
 assert.doesNotMatch(worker, /학번·입국·입학일자 저장은 완료됐으나/, '증거 없이 저장 완료라고 쓰면 안 됩니다.');
+
+// 1.2.0
+assert.match(content, /rowSearchText/, '목록 행의 입력칸 값까지 읽어야 대상 학생을 찾습니다.');
+assert.match(content, /sanitizeSchoolName/, '최종출신학교 특수문자 정리가 필요합니다.');
+assert.match(content, /lastOriSchol/, '최종출신학교 필드 셀렉터가 필요합니다.');
+assert.doesNotMatch(content, /const text = normalizeText\(row\?\.innerText/, '행 매칭에 innerText만 쓰면 입력칸 값을 놓칩니다.');
 
 // 화면 버전은 manifest 에서 읽는다 (하드코딩 금지)
 const runnerHtmlRaw = await fs.readFile(path.join(root, 'runner.html'), 'utf8');

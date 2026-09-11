@@ -18,8 +18,16 @@ function asElement(properties) {
   return Object.assign(new FakeElement(), properties);
 }
 
-function makeRow(text) {
-  return asElement({ tagName: 'TR', innerText: text, textContent: text });
+// 실제 수정대상자 목록은 성명·생년월일·등록번호를 <input> 으로 보여준다.
+// innerText 에는 그 값들이 없다. 이 구조를 그대로 흉내내야 의미 있는 테스트가 된다.
+function makeRow(text, fieldValues = []) {
+  const fields = fieldValues.map((value) => asElement({ tagName: 'INPUT', value, getAttribute: () => null }));
+  return asElement({
+    tagName: 'TR',
+    innerText: text,
+    textContent: text,
+    querySelectorAll: (selector) => (selector === 'input,select,textarea' ? fields : [])
+  });
 }
 function makeLink(row) {
   return asElement({
@@ -40,10 +48,13 @@ function makeRadio(row, title) {
   });
 }
 
-function build({ rows = [], radios = [], bodyText = '', hasUpdate = true, pathname = '/isi/IntlStudInfoR.xec' }) {
-  const links = rows.map((text) => makeLink(makeRow(text)));
-  const radioNodes = radios.map(({ text, title }) => makeRadio(makeRow(text), title));
+function build({ rows = [], radios = [], bodyText = '', bodyFields = [], hasUpdate = true, pathname = '/isi/IntlStudInfoR.xec' }) {
+  const links = rows.map((row) => makeLink(
+    typeof row === 'string' ? makeRow(row) : makeRow(row.text || '', row.fields || [])
+  ));
+  const radioNodes = radios.map(({ text, fields, title }) => makeRadio(makeRow(text, fields || []), title));
   const updateButton = hasUpdate ? makeLink(makeRow('')) : null;
+  const bodyNode = makeRow(bodyText, bodyFields);
   const context = vm.createContext({
     console, crypto: webcrypto,
     setTimeout: (cb) => { cb(); return 1; }, clearTimeout() {},
@@ -52,7 +63,7 @@ function build({ rows = [], radios = [], bodyText = '', hasUpdate = true, pathna
     location: { href: `https://fims.hikorea.go.kr${pathname}`, pathname },
     window: { name: 'mainFrame' },
     document: {
-      body: { innerText: bodyText, textContent: bodyText },
+      body: bodyNode,
       querySelector: (sel) => {
         if (sel === UPDATE) return updateButton;
         if (sel === RADIO) return radioNodes[0] || null;
@@ -82,6 +93,21 @@ const student = { name: 'AVAR, YAGMUR', birthDate: '20041213', studentNo: '96238
   // 숫자가 우연히 이어진 경우는 인정하지 않는다
   assert.equal(hooks.containsDateToken('920041213456', '20041213'), false);
   assert.deepEqual([...hooks.datesIn('입국 2026.08.24 출국 2026.09.01')], ['2026.08.24', '2026.09.01']);
+}
+
+// ── 실제 구조 회귀: 성명·생년월일·학번이 <input> 안에 있어도 찾아야 한다.
+// 예전에는 row.innerText 만 읽어 학생이 조회돼도 매칭에 실패했다(실사례).
+{
+  const { hooks } = build({
+    rows: [
+      { text: '1 여성 중국 D-2-8 2027.01.31 단기유학과정', fields: ['DING YUQIONG', '1998.11.04', '9625020264'] }
+    ]
+  });
+  assert.equal(
+    hooks.matchModiObjRows({ name: 'DING, YUQIONG', birthDate: '19981104', studentNo: '9625020264' }).length,
+    1,
+    '입력칸 안의 성명·생년월일·학번으로도 대상 학생을 찾아야 합니다.'
+  );
 }
 
 // ── 목록에서 대상 학생만 고른다: 다른 학생이 같이 떠 있어도 절대 선택하지 않는다
@@ -185,3 +211,34 @@ const popupBody = 'AVAR YAGMUR 2004.12.13 출입국기록';
 }
 
 console.log('modiobj tests passed');
+
+// ── 최종출신학교 특수문자 정리 ────────────────────────────────────────────
+// FIMS: "최종출신학교에 -,(,),. 이외의 특수문자를 입력하실 수 없습니다."
+{
+  const { hooks } = build({});
+  const { sanitizeSchoolName, needsSchoolSanitize } = hooks;
+
+  // 사용자가 확인한 기대 동작
+  assert.equal(
+    sanitizeSchoolName('University of Applied Sciences, Worms'),
+    'University of Applied Sciences Worms'
+  );
+  // 쉼표 뒤에 공백이 없어도 단어가 붙지 않아야 한다
+  assert.equal(sanitizeSchoolName('ABC,DEF'), 'ABC DEF');
+  // 허용 문자는 그대로 둔다
+  assert.equal(sanitizeSchoolName('Seoul Nat.-Univ. (Main)'), 'Seoul Nat.-Univ. (Main)');
+  assert.equal(sanitizeSchoolName('한양대학교(ERICA)'), '한양대학교(ERICA)');
+  // 한자·비라틴 문자도 글자이므로 남긴다
+  assert.equal(sanitizeSchoolName('北京大学'), '北京大学');
+  // 그 외 특수문자는 제거
+  assert.equal(sanitizeSchoolName('A&B / C@D #1'), 'A B C D 1');
+  assert.equal(sanitizeSchoolName("St. John's College"), 'St. John s College');
+
+  // 문제가 없으면 건드리지 않는다
+  assert.equal(needsSchoolSanitize('Seoul Nat.-Univ. (Main)'), false);
+  assert.equal(needsSchoolSanitize('한양대학교(ERICA)'), false);
+  assert.equal(needsSchoolSanitize(''), false);
+  assert.equal(needsSchoolSanitize('University of Applied Sciences, Worms'), true);
+}
+
+console.log('school sanitize tests passed');
