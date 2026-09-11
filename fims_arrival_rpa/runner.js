@@ -376,14 +376,18 @@ async function runDiagnosis() {
 
   setBusy(true, '진단 중 (조회만)');
   try {
-    log('진단 모드입니다. 조회와 상세조회까지만 하고 수정·저장은 실행하지 않습니다.', 'INFO');
-    log('FIMS에 어떤 값도 기록되지 않습니다.', 'INFO');
+    log('진단 모드입니다. 수정화면까지 열어 입력을 재현하지만 저장 버튼은 누르지 않습니다.', 'INFO');
+    log('저장하지 않으면 FIMS에 아무것도 반영되지 않습니다. 끝나면 열린 FIMS 창은 그냥 닫으세요.', 'INFO');
     const login = await command('OPEN_OR_LOGIN', { userId, password });
     state.tabId = login.tabId;
     log(login.message, 'OK');
 
     log(`진단 대상: 명단 첫 번째 학생 (${student.name})`);
-    const report = await command('DIAGNOSE_STUDENT', { tabId: state.tabId, student });
+    const report = await command('DIAGNOSE_STUDENT', {
+      tabId: state.tabId,
+      student: { ...student, admissionDate: state.workbook.config?.admissionDate || '' },
+      depth: 'edit'
+    });
 
     for (const step of report.steps) {
       log(`${step.ok ? '[OK] ' : '[WARN] '}${step.step}${step.detail ? ` — ${step.detail}` : ''}`, step.ok ? 'OK' : 'WARN');

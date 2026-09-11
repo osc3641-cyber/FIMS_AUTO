@@ -855,7 +855,7 @@ async function collectFrameDiagnostics(tabId, student) {
   return collected;
 }
 
-async function diagnoseArrivalStudent({ tabId, student }) {
+async function diagnoseArrivalStudent({ tabId, student, depth = 'edit' }) {
   if (!tabId) throw new Error('먼저 로그인해 FIMS 창을 연 뒤 진단하세요.');
   if (!student?.name || !student?.birthDate) throw new Error('진단할 학생의 성명과 생년월일이 필요합니다.');
 
@@ -910,9 +910,46 @@ async function diagnoseArrivalStudent({ tabId, student }) {
   const detailDiagnostics = await collectFrameDiagnostics(tabId, student);
   record('상세화면 상태 수집', true, `프레임 ${detailDiagnostics.length}개`, detailDiagnostics);
 
-  // 여기서 끝낸다. CLICK_ARRIVAL_EDIT / FILL_ARRIVAL_EDIT / SAVE_ARRIVAL_EDIT 는 호출하지 않는다.
-  record('진단 종료 (수정·저장 미실행)', true, 'FIMS에 아무것도 기록하지 않았습니다.');
-  return { stoppedAt: '상세화면 확인 완료', steps, wroteToFims: false };
+  if (depth !== 'edit') {
+    record('진단 종료 (수정화면 미진입)', true, 'FIMS에 아무것도 기록하지 않았습니다.');
+    return { stoppedAt: '상세화면 확인 완료', steps, wroteToFims: false };
+  }
+
+  // 수정화면까지 진단한다. 수정 버튼을 눌러 입력 폼을 열고 실제로 값을 넣어보되
+  // 저장(SAVE_ARRIVAL_EDIT)은 절대 호출하지 않는다. 저장하지 않은 폼 입력은
+  // 브라우저 화면에만 남고 FIMS에는 전혀 반영되지 않는다.
+  const editClicked = await sendAction(tabId, detailFrame.frameId, 'CLICK_ARRIVAL_EDIT');
+  record('수정화면 열기', editClicked.ok === true, editClicked.message || '');
+  if (!editClicked.ok) {
+    return { stoppedAt: '수정화면 열기', steps, wroteToFims: false };
+  }
+
+  const editFrame = await waitForEditFrame(tabId, 30000);
+  record('수정화면 진입', Boolean(editFrame), editFrame ? `frameId=${editFrame.frameId}` : '수정화면을 확인하지 못했습니다.');
+  if (!editFrame) {
+    const after = await collectFrameDiagnostics(tabId, student);
+    record('수정화면 미확인 시점 상태', true, `프레임 ${after.length}개`, after);
+    return { stoppedAt: '수정화면 진입', steps, wroteToFims: false };
+  }
+
+  const beforeFill = await collectFrameDiagnostics(tabId, student);
+  record('입력 전 수정화면 상태', true, '학번·입국여부·입학일자 칸의 잠금/길이/현재값 여부', beforeFill);
+
+  // 실제 입력을 재현한다. 여기서 실패하면 실사용에서 실패하는 것과 같은 지점이다.
+  const filled = await sendAction(tabId, editFrame.frameId, 'FILL_ARRIVAL_EDIT', {
+    name: student.name,
+    birthDate: student.birthDate,
+    studentNo: student.studentNo,
+    admissionDate: student.admissionDate || ''
+  });
+  record('입력 재현 (저장 안 함)', filled.ok === true, filled.message || '', filled.data || null);
+
+  const afterFill = await collectFrameDiagnostics(tabId, student);
+  record('입력 후 수정화면 상태', true, '입력값이 남아 있는지 / 되돌아갔는지', afterFill);
+
+  // 저장은 호출하지 않는다. SAVE_ARRIVAL_EDIT 는 이 경로에 존재하지 않는다.
+  record('진단 종료 (저장 미실행)', true, '저장 버튼을 누르지 않았으므로 FIMS에 반영되지 않았습니다. 열린 FIMS 창은 그냥 닫으세요.');
+  return { stoppedAt: filled.ok ? '입력 재현 성공 (저장 안 함)' : `입력 재현 실패: ${filled.message || ''}`, steps, wroteToFims: false };
 }
 
 async function focusFims({ tabId }) {

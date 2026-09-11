@@ -5,7 +5,7 @@ import path from 'node:path';
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'manifest.json'), 'utf8'));
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.0.6');
+assert.equal(manifest.version, '1.0.7');
 assert.equal(manifest.name, 'FIMS 입국신고 자동화 (Excel)');
 assert.ok(!manifest.permissions.includes('debugger'), '로그인과 저장 처리에 Chrome debugger 권한을 사용하면 안 됩니다.');
 assert.ok(manifest.permissions.includes('cookies'), '새 FIMS 로그인 전에 세션 쿠키를 지울 권한이 필요합니다.');
@@ -57,7 +57,11 @@ assert.match(content, /a\[onclick\*="fncGetDetail"\]/);
 assert.match(content, /resolveDetailCandidate/);
 assert.match(content, /single-detail-link/);
 assert.match(content, /#entrYN/);
-assert.match(content, /setNativeValue\(arrivalSelect, 'N'\)/);
+assert.match(content, /setNativeValue\(document\.querySelector\('#entrYN'\), 'N'\)/, '입국여부는 value N으로 설정해야 합니다.');
+assert.match(content, /selectedText !== '입국'/, '입국여부 표시문자까지 검증해야 합니다.');
+// 1.0.7: 입국여부 change 핸들러가 다른 칸을 되돌릴 수 있으므로 검증은 DOM 재조회로 한다
+assert.match(content, /setNativeValueQuiet/, '값이 밀렸을 때 이벤트 없이 재시도해야 합니다.');
+assert.match(content, /fieldReport/, '입력 실패 시 입력칸 상태를 남겨야 합니다.');
 
 // 1.0.5 회귀 방지
 assert.match(content, /IntlStudBaInfo\(\?:DtlRU\|DtlR\|U\)/, '수정화면 URL IntlStudBaInfoDtlRU.xec 를 인식해야 합니다.');

@@ -301,6 +301,7 @@ const diagnoseFlow = await vm.runInContext(`(async () => {
   ensureContentScript = async () => true;
   waitArrivalSearchResult = async () => ({frame:{frameId:40},data:{state:'FOUND',matchCount:1}});
   waitForDetailFrame = async () => ({frameId:41,state:{hasStudentDetailView:true}});
+  waitForEditFrame = async () => ({frameId:42,state:{hasArrivalEditForm:true}});
   sendAction = async (_tabId, frameId, action) => {
     calls.push(action);
     if (action === 'COLLECT_DIAGNOSTICS') return {ok:true,data:{probes:[],hasBasicSearchForm:true}};
@@ -310,23 +311,49 @@ const diagnoseFlow = await vm.runInContext(`(async () => {
   };
   const report = await diagnoseArrivalStudent({
     tabId:1,
-    student:{name:'TEST STUDENT',birthDate:'2000.01.02',studentNo:'9511123456'}
+    student:{name:'TEST STUDENT',birthDate:'2000.01.02',studentNo:'9511123456',admissionDate:'20260901'}
   });
   return {report, calls};
 })()`, context);
 
+// 진단의 안전 계약: 저장은 절대 호출하지 않는다.
+// 수정화면 열기와 입력 재현은 저장하지 않는 한 FIMS에 반영되지 않으므로 허용한다.
 assert.equal(diagnoseFlow.report.wroteToFims, false);
-assert.equal(diagnoseFlow.report.stoppedAt, '상세화면 확인 완료');
-for (const forbidden of ['CLICK_ARRIVAL_EDIT', 'FILL_ARRIVAL_EDIT', 'SAVE_ARRIVAL_EDIT']) {
-  assert.ok(
-    !diagnoseFlow.calls.includes(forbidden),
-    `진단 모드가 쓰기 명령 ${forbidden} 을 보내면 안 됩니다.`
-  );
-}
+assert.ok(
+  !diagnoseFlow.calls.includes('SAVE_ARRIVAL_EDIT'),
+  '진단 모드는 저장 명령을 절대 보내면 안 됩니다.'
+);
 assert.ok(diagnoseFlow.calls.includes('PREPARE_ARRIVAL_SEARCH'));
 assert.ok(diagnoseFlow.calls.includes('OPEN_ARRIVAL_DETAIL'));
 assert.ok(diagnoseFlow.calls.includes('READ_DETAIL_IDENTITY'));
-assert.ok(diagnoseFlow.report.steps.some((step) => step.step.includes('수정·저장 미실행')));
+assert.ok(diagnoseFlow.calls.includes('CLICK_ARRIVAL_EDIT'));
+assert.ok(diagnoseFlow.calls.includes('FILL_ARRIVAL_EDIT'));
+assert.ok(diagnoseFlow.report.steps.some((step) => step.step.includes('저장 미실행')));
+
+// depth:'search' 면 수정화면에도 들어가지 않는다
+const diagnoseSearchOnly = await vm.runInContext(`(async () => {
+  const calls = [];
+  ensureBasicSearchFrame = async () => ({frameId:60,state:{documentToken:'old'}});
+  getFrames = async () => ([{frameId:60,parentFrameId:-1,url:'x'}]);
+  ensureContentScript = async () => true;
+  waitArrivalSearchResult = async () => ({frame:{frameId:60},data:{state:'FOUND',matchCount:1}});
+  waitForDetailFrame = async () => ({frameId:61,state:{hasStudentDetailView:true}});
+  sendAction = async (_tabId, _frameId, action) => {
+    calls.push(action);
+    if (action === 'COLLECT_DIAGNOSTICS') return {ok:true,data:{}};
+    if (action === 'READ_DETAIL_IDENTITY') return {ok:true,data:{nameMatches:true,birthDateMatches:true}};
+    if (action === 'OPEN_ARRIVAL_DETAIL') return {ok:true,matchStrategy:'name-match'};
+    return {ok:true};
+  };
+  const report = await diagnoseArrivalStudent({
+    tabId:1, depth:'search',
+    student:{name:'TEST STUDENT',birthDate:'2000.01.02',studentNo:'9511123456'}
+  });
+  return {report, calls};
+})()`, context);
+for (const forbidden of ['CLICK_ARRIVAL_EDIT', 'FILL_ARRIVAL_EDIT', 'SAVE_ARRIVAL_EDIT']) {
+  assert.ok(!diagnoseSearchOnly.calls.includes(forbidden), `depth:'search' 에서 ${forbidden} 금지`);
+}
 
 // 조회 실패로 끝나도 쓰기 명령은 없어야 한다
 const diagnoseNotFound = await vm.runInContext(`(async () => {

@@ -131,3 +131,27 @@ const student = { name: 'SAMPLE SURNAME, GIVEN MIDDLE', birthDate: '20000304' };
 }
 
 console.log('arrival regression test passed');
+
+// ── 신원 확인 강화: 페이지의 숫자들이 우연히 이어져 생년월일처럼 보이면 안 된다.
+// 예전 digits(bodyText).includes() 방식은 아래 본문에서 '20040925'를 찾아내
+// 남의 상세화면을 대상 학생으로 오인할 수 있었다.
+{
+  // "학번 9612004 / 전화 0925..." → 숫자만 이으면 ...9612004 0925... 안에 20040925 가 생긴다
+  const hooks = buildContext({
+    pathname: '/isi/IntlStudBaInfoDtlR.xec',
+    nodes: {},
+    bodyText: 'OTHER PERSON 학번 9612004 연락처 0925 1234 입학 2026.03.02'
+  });
+  const data = hooks.readDetailData({ name: 'SAMPLE SURNAME, GIVEN MIDDLE', birthDate: '20040925' });
+  assert.equal(data.birthDateMatches, false, '숫자가 우연히 이어진 것을 생년월일 일치로 보면 안 됩니다.');
+}
+{
+  // 온전한 날짜 토큰이면 형식과 무관하게 인정한다
+  for (const body of ['생년월일 2004.09.25 입니다', '생년월일 20040925', '2004-09-25', '2004/09/25']) {
+    const hooks = buildContext({ pathname: '/isi/IntlStudBaInfoDtlR.xec', nodes: {}, bodyText: `SAMPLE SURNAME GIVEN MIDDLE ${body}` });
+    const data = hooks.readDetailData({ name: 'SAMPLE SURNAME, GIVEN MIDDLE', birthDate: '20040925' });
+    assert.equal(data.birthDateMatches, true, `정상 날짜 표기를 인식해야 합니다: ${body}`);
+  }
+}
+
+console.log('identity hardening test passed');

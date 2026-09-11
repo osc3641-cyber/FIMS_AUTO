@@ -82,6 +82,22 @@
     return String(input.value ?? '') === next;
   }
 
+  // 재시도용: 값만 바꾸고 input/change/blur를 쏘지 않는다.
+  // 값을 되돌린 원인이 그 핸들러 자신일 수 있으므로 다시 부르지 않는다.
+  function setNativeValueQuiet(input, value) {
+    if (!input) return false;
+    const next = String(value ?? '');
+    const prototype = input instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : input instanceof HTMLSelectElement
+        ? HTMLSelectElement.prototype
+        : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+    if (setter) setter.call(input, next);
+    else input.value = next;
+    return String(input.value ?? '') === next;
+  }
+
   function setChecked(input, checked) {
     if (!input) return false;
     if (Boolean(input.checked) !== Boolean(checked)) input.click();
@@ -276,7 +292,20 @@
     const expectedName = normalizeFimsName(payload.name || '');
     const expectedBirth = digits(payload.birthDate || '');
     const bodyNamePresent = expectedName ? normalizeName(bodyText).includes(expectedName) : false;
-    const bodyBirthPresent = expectedBirth ? digits(bodyText).includes(expectedBirth) : false;
+    // 예전에는 digits(bodyText).includes(expectedBirth) 였다. 페이지의 모든 숫자를
+    // 이어붙인 문자열에서 찾기 때문에, 서로 다른 칸의 숫자가 우연히 이어지면
+    // 남의 생년월일이 일치한 것처럼 보일 수 있었다(= 엉뚱한 학생을 수정할 위험).
+    // 이제는 앞뒤가 숫자가 아닌 온전한 날짜 토큰으로만 인정한다.
+    const bodyBirthPresent = expectedBirth ? (() => {
+      const year = expectedBirth.slice(0, 4);
+      const month = expectedBirth.slice(4, 6);
+      const day = expectedBirth.slice(6, 8);
+      const forms = [expectedBirth, `${year}.${month}.${day}`, `${year}-${month}-${day}`, `${year}/${month}/${day}`];
+      return forms.some((form) => {
+        const escaped = form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(`(?<![0-9])${escaped}(?![0-9])`).test(bodyText);
+      });
+    })() : false;
     return {
       documentToken: DOCUMENT_TOKEN,
       name,
@@ -373,22 +402,77 @@
     return { ok: true };
   }
 
+  // 입력칸이 왜 값을 유지하지 못했는지 알 수 있게 상태를 그대로 담는다.
+  // 특히 value === defaultValue 이면 FIMS가 값을 되돌린 것(폼 리셋/핸들러 개입)이고,
+  // 그냥 비어 있으면 애초에 들어가지 않은 것이다. 둘은 원인이 완전히 다르다.
+  function fieldReport(selector, expected) {
+    const element = document.querySelector(selector);
+    if (!element) return `${selector}=없음`;
+    const value = String(element.value ?? '');
+    const parts = [
+      `길이 ${value.length}/${String(expected ?? '').length}`,
+      element.readOnly ? 'readOnly' : '',
+      element.disabled ? 'disabled' : '',
+      Number.isInteger(element.maxLength) && element.maxLength >= 0 ? `maxlength=${element.maxLength}` : '',
+      value && value === String(element.defaultValue ?? '') ? 'FIMS원래값으로되돌아감' : '',
+      !value ? '비어있음' : '',
+      element.isConnected === false ? '화면에서분리됨' : ''
+    ].filter(Boolean);
+    return `${selector}(${parts.join(', ')})`;
+  }
+
   function fillArrivalEdit(payload) {
     const identity = readDetailData(payload);
     if (!identity.nameMatches || !identity.birthDateMatches) return { ok: false, message: '수정화면의 성명·생년월일이 엑셀 대상과 일치하지 않습니다.' };
-    const studentNo = document.querySelector('#scholNo');
-    const arrivalSelect = document.querySelector('#entrYN');
-    const admissionDate = document.querySelector('#admsnYmd');
-    if (!studentNo || !arrivalSelect || !admissionDate) return { ok: false, message: '수정화면의 학번·입국일자·입학(복학)일자 요소를 찾지 못했습니다.' };
+    if (!document.querySelector('#scholNo') || !document.querySelector('#entrYN') || !document.querySelector('#admsnYmd')) {
+      return { ok: false, message: '수정화면의 학번·입국일자·입학(복학)일자 요소를 찾지 못했습니다.' };
+    }
     const expectedStudentNo = digits(payload.studentNo);
     const expectedAdmissionDate = formatDate(payload.admissionDate);
-    setNativeValue(studentNo, expectedStudentNo);
-    setNativeValue(arrivalSelect, 'N');
-    setNativeValue(admissionDate, expectedAdmissionDate);
-    const selectedText = normalizeText(arrivalSelect.options[arrivalSelect.selectedIndex]?.text || '');
-    if (digits(studentNo.value) !== expectedStudentNo) return { ok: false, message: '학번 입력값이 FIMS 화면에 유지되지 않았습니다.' };
-    if (arrivalSelect.value !== 'N' || selectedText !== '입국') return { ok: false, message: `입국 선택값을 확인하지 못했습니다: ${arrivalSelect.value}/${selectedText}` };
-    if (digits(admissionDate.value) !== digits(expectedAdmissionDate)) return { ok: false, message: '입학(복학)일자 입력값이 FIMS 화면에 유지되지 않았습니다.' };
+
+    setNativeValue(document.querySelector('#scholNo'), expectedStudentNo);
+    setNativeValue(document.querySelector('#entrYN'), 'N');
+    setNativeValue(document.querySelector('#admsnYmd'), expectedAdmissionDate);
+
+    // 입국여부(#entrYN) change 핸들러가 다른 칸을 되돌리거나 폼을 다시 그릴 수 있다.
+    // 그래서 검증은 반드시 DOM에서 다시 찾아서 한다. 예전에는 처음 잡아둔 참조를
+    // 그대로 읽어, 폼이 교체되면 엉뚱한 노드를 검사했다.
+    // 값이 밀렸으면 이벤트 없이 한 번만 조용히 다시 넣는다(핸들러 재발동 방지).
+    const settle = (selector, expectedValue, compare) => {
+      let element = document.querySelector(selector);
+      if (element && compare(element)) return { element, retried: false };
+      element = document.querySelector(selector);
+      if (!element) return { element: null, retried: true };
+      setNativeValueQuiet(element, expectedValue);
+      return { element: document.querySelector(selector), retried: true };
+    };
+
+    const studentNoResult = settle('#scholNo', expectedStudentNo, (el) => digits(el.value) === expectedStudentNo);
+    const admissionResult = settle('#admsnYmd', expectedAdmissionDate, (el) => digits(el.value) === digits(expectedAdmissionDate));
+
+    const studentNo = studentNoResult.element || document.querySelector('#scholNo');
+    const admissionDate = admissionResult.element || document.querySelector('#admsnYmd');
+    const arrivalSelect = document.querySelector('#entrYN');
+    if (!studentNo || !arrivalSelect || !admissionDate) {
+      return { ok: false, message: '입력 도중 수정화면의 입력칸이 사라졌습니다. FIMS 화면이 새로 그려졌을 수 있습니다.' };
+    }
+    const selectedText = normalizeText(arrivalSelect.options?.[arrivalSelect.selectedIndex]?.text || '');
+
+    if (digits(studentNo.value) !== expectedStudentNo) {
+      return {
+        ok: false,
+        message: `학번 입력값이 FIMS 화면에 유지되지 않았습니다. [${fieldReport('#scholNo', expectedStudentNo)} / 재시도 ${studentNoResult.retried ? '함' : '안함'} / 입국여부 ${arrivalSelect.value}·${selectedText}]`
+      };
+    }
+    if (arrivalSelect.value !== 'N' || selectedText !== '입국') {
+      return { ok: false, message: `입국 선택값을 확인하지 못했습니다: ${arrivalSelect.value}/${selectedText}` };
+    }
+    if (digits(admissionDate.value) !== digits(expectedAdmissionDate)) {
+      return {
+        ok: false,
+        message: `입학(복학)일자 입력값이 FIMS 화면에 유지되지 않았습니다. [${fieldReport('#admsnYmd', expectedAdmissionDate)} / 재시도 ${admissionResult.retried ? '함' : '안함'}]`
+      };
+    }
     return {
       ok: true,
       data: {
@@ -396,7 +480,9 @@
         arrivalCode: arrivalSelect.value,
         arrivalText: selectedText,
         admissionDate: admissionDate.value,
-        immigrationArrivalDate: normalizeText(document.querySelector('#eYmd')?.value || '')
+        immigrationArrivalDate: normalizeText(document.querySelector('#eYmd')?.value || ''),
+        retriedStudentNo: studentNoResult.retried,
+        retriedAdmissionDate: admissionResult.retried
       }
     };
   }
