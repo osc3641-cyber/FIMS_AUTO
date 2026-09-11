@@ -5,7 +5,7 @@ import path from 'node:path';
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'manifest.json'), 'utf8'));
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.1.0');
+assert.equal(manifest.version, '1.1.1');
 assert.equal(manifest.name, 'FIMS 입국신고 자동화 (Excel)');
 assert.ok(!manifest.permissions.includes('debugger'), '로그인과 저장 처리에 Chrome debugger 권한을 사용하면 안 됩니다.');
 assert.ok(manifest.permissions.includes('cookies'), '새 FIMS 로그인 전에 세션 쿠키를 지울 권한이 필요합니다.');
@@ -83,6 +83,13 @@ assert.match(content, /applyIcrmUpdate/, '팝업 수정 적용 함수가 필요�
 assert.match(runner, /RECHECK_ARRIVAL/, '실행 화면에 별도처리 실행 경로가 있어야 합니다.');
 assert.match(runner, /recheckTargets/, '별도처리 대상 선별 로직이 필요합니다.');
 assert.match(xlsx, /parsePriorResults/, '처리결과 탭을 다시 읽을 수 있어야 합니다.');
+
+// 1.1.1: 저장은 증거가 있을 때만 '완료'로 인정한다
+assert.match(worker, /waitForSaveOutcome/, '저장 결과를 증거로 판정해야 합니다.');
+assert.match(worker, /isSaveSuccessMessage/, 'FIMS 저장 성공 알림을 판별해야 합니다.');
+assert.match(worker, /SAVE_NOT_EXECUTED/, '저장이 실행되지 않은 경우를 구분해야 합니다.');
+assert.match(worker, /SAVE_REJECTED/, 'FIMS가 저장을 거부한 경우를 구분해야 합니다.');
+assert.doesNotMatch(worker, /학번·입국·입학일자 저장은 완료됐으나/, '증거 없이 저장 완료라고 쓰면 안 됩니다.');
 
 // 화면 버전은 manifest 에서 읽는다 (하드코딩 금지)
 const runnerHtmlRaw = await fs.readFile(path.join(root, 'runner.html'), 'utf8');

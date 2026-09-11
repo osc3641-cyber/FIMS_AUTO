@@ -10,6 +10,9 @@ const context = vm.createContext({
   chrome: { runtime: { onMessage: { addListener() {} } } }
 });
 vm.runInContext(source, context, { filename: 'service-worker.js' });
+// 테스트들이 같은 vm 컨텍스트를 공유하므로 전역 목이 다음 테스트로 샌다.
+// 실제 구현이 필요한 테스트가 복원해 쓸 수 있게 원본을 보관해 둔다.
+vm.runInContext('globalThis.__real = { waitForSaveOutcome, waitForArrivalVerification };', context);
 
 assert.equal(vm.runInContext('FIMS_ENTRY_URL', context), 'https://fims.hikorea.go.kr/isi/index.html');
 assert.equal(vm.runInContext("normalizeFimsName('SAMPLE LONGNAME TESTCASE OVERFLOW ALPHA')", context), 'SAMPLE LONGNAME TESTCASE OVERFLOW ALPH');
@@ -264,10 +267,16 @@ const missingDateFlow = await vm.runInContext(`(async () => {
   waitArrivalSearchResult = async () => ({frame:{frameId:20},data:{state:'FOUND',matchCount:1}});
   waitForDetailFrame = async () => ({frameId:21,state:{hasStudentDetailView:true}});
   waitForEditFrame = async () => ({frameId:22,state:{hasArrivalEditForm:true}});
-  waitForArrivalVerification = async () => ({frame:{frameId:21},data:{
-    nameMatches:true,birthDateMatches:true,studentNo:'9511123456',admissionDate:'2026.09.01',
-    arrivalDate:'',arrivalMarked:false,arrivalConfirmed:false
-  }});
+  // 1.1.1: 저장은 실제로 확인됐지만(성공 알림) 입국일자만 없는 경우.
+  // 저장 증거가 없으면 이 분기로 오면 안 된다(아래 saveSilent 테스트가 잠금).
+  waitForSaveOutcome = async () => ({
+    state:'SAVED',
+    messages:['성공적으로 저장되었습니다.[1건]'],
+    verification:{frame:{frameId:21},data:{
+      nameMatches:true,birthDateMatches:true,studentNo:'9511123456',admissionDate:'2026.09.01',
+      arrivalDate:'',arrivalMarked:false,arrivalConfirmed:false
+    }}
+  });
   setDialogModeAllFrames = async () => ({armed:1,armedFrameIds:[22]});
   getDialogLogs = async () => [];
   clearDialogMode = async () => {};
@@ -439,3 +448,64 @@ await assert.rejects(
   () => vm.runInContext(`recheckArrivalStudent({tabId:1, student:{name:'X'}})`, context),
   /성명·생년월일·학번/
 );
+
+// ── 저장 판정: 증거 없이 '저장됨'이라고 하면 안 된다 ────────────────────────
+// 실사례: 학번·입학일자가 하나도 저장되지 않은 학생을 '저장은 완료됐으나
+// 입국일자 미확인'으로 기록해, 엉뚱하게 별도처리 대상이 됐다.
+vm.runInContext('SAVE_OUTCOME_TIMEOUT_MS = 900;', context);
+
+function saveScenario({ alerts, arrivalConfirmed, arrivalDate }) {
+  return `(async () => {
+    waitForSaveOutcome = globalThis.__real.waitForSaveOutcome;
+    waitForArrivalVerification = globalThis.__real.waitForArrivalVerification;
+    ensureBasicSearchFrame = async () => ({frameId:80,state:{documentToken:'old'}});
+    waitArrivalSearchResult = async () => ({frame:{frameId:80},data:{state:'FOUND',matchCount:1}});
+    waitForDetailFrame = async () => ({frameId:81,state:{hasStudentDetailView:true}});
+    waitForEditFrame = async () => ({frameId:82,state:{hasArrivalEditForm:true}});
+    waitForFrame = async () => ({frameId:82,state:{hasArrivalEditForm:true}});
+    setDialogModeAllFrames = async () => ({armed:1,armedFrameIds:[82]});
+    clearDialogMode = async () => {};
+    getDialogLogs = async () => (${JSON.stringify(alerts)}).map((m) => ({kind:'alert',message:m}));
+    inspectAll = async () => ([{frameId:82,state:{canVerifyArrival:true}}]);
+    sendAction = async (_tabId, _frameId, action) => {
+      if (action === 'READ_DETAIL_IDENTITY') return {ok:true,data:{nameMatches:true,birthDateMatches:true}};
+      if (action === 'READ_ARRIVAL_VERIFICATION') return {ok:true,data:{
+        nameMatches:true,birthDateMatches:true,studentNo:'9511123456',admissionDate:'2026.09.01',
+        arrivalDate:${JSON.stringify(arrivalDate)},arrivalMarked:false,arrivalConfirmed:${arrivalConfirmed}
+      }};
+      return {ok:true};
+    };
+    return processArrivalStudent({
+      tabId:1,
+      student:{name:'TEST STUDENT',birthDate:'2000.01.02',studentNo:'9511123456'},
+      config:{admissionDate:'2026.09.01'}
+    });
+  })()`;
+}
+
+// 저장 알림도 없고 입국일자도 안 채워졌다 → 저장 실패로 기록해야 한다
+const saveSilent = await vm.runInContext(
+  saveScenario({ alerts: [], arrivalConfirmed: false, arrivalDate: '' }), context);
+assert.equal(saveSilent.code, 'SAVE_NOT_EXECUTED');
+assert.equal(saveSilent.result, '입국정보 저장 실패');
+assert.notEqual(saveSilent.result, '입국일자 미확인', '저장이 안 됐는데 입국일자 미확인으로 분류하면 안 됩니다.');
+assert.doesNotMatch(saveSilent.detail, /저장은 완료/, '증거 없이 저장 완료라고 쓰면 안 됩니다.');
+
+// FIMS가 경고창으로 거부 → 그 문구를 그대로 남겨야 한다
+const saveRejected = await vm.runInContext(
+  saveScenario({ alerts: ['입학(복학)일자를 입력하세요.'], arrivalConfirmed: false, arrivalDate: '' }), context);
+assert.equal(saveRejected.code, 'SAVE_REJECTED');
+assert.equal(saveRejected.result, '입국정보 저장 실패');
+assert.match(saveRejected.detail, /입학\(복학\)일자를 입력하세요/, 'FIMS 거부 사유를 그대로 보여줘야 합니다.');
+
+// 저장 알림은 떴지만 입국일자가 없다 → 진짜 별도처리 대상
+const saveNoArrival = await vm.runInContext(
+  saveScenario({ alerts: ['성공적으로 저장되었습니다.[1건]'], arrivalConfirmed: false, arrivalDate: '' }), context);
+assert.equal(saveNoArrival.code, 'ARRIVAL_DATE_MISSING');
+assert.equal(saveNoArrival.result, '입국일자 미확인');
+
+// 입국일자까지 확인 → 완료
+const saveComplete = await vm.runInContext(
+  saveScenario({ alerts: ['성공적으로 저장되었습니다.[1건]'], arrivalConfirmed: true, arrivalDate: '2026.08.24' }), context);
+assert.equal(saveComplete.code, 'COMPLETED');
+assert.equal(saveComplete.arrivalDate, '2026.08.24');

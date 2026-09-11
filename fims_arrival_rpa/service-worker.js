@@ -10,6 +10,8 @@ const FIMS_NAME_MAX_LENGTH = 38;
 const LOGIN_PAGE_SETTLE_MS = 2500;
 const LOGIN_INPUT_SETTLE_MS = 350;
 const POST_LOGIN_MENU_SETTLE_MS = 1800;
+// 저장 결과 판정 대기 시간. 테스트에서 줄여 쓴다.
+let SAVE_OUTCOME_TIMEOUT_MS = 20000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const normalizeText = (value) => String(value ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -767,6 +769,13 @@ async function processArrivalStudent({ tabId, student, config }) {
     };
   }
   try {
+    const verifyPayload = {
+      name: student.name,
+      birthDate: student.birthDate,
+      studentNo: student.studentNo,
+      admissionDate: config.admissionDate
+    };
+
     const saveResponse = await withTimeout(
       sendAction(tabId, editFrame.frameId, 'SAVE_ARRIVAL_EDIT'),
       15000,
@@ -774,16 +783,45 @@ async function processArrivalStudent({ tabId, student, config }) {
     );
     if (!saveResponse.ok) throw new Error(saveResponse.message || '저장 버튼 클릭 실패');
 
-    const verified = await waitForArrivalVerification(tabId, {
-      name: student.name,
-      birthDate: student.birthDate,
-      studentNo: student.studentNo,
-      admissionDate: config.admissionDate
-    }, 45000);
-    if (!verified) {
-      throw new Error('저장 후 학생 화면에서 신원을 재검증하지 못했습니다.');
+    let outcome = await waitForSaveOutcome(tabId, verifyPayload);
+    // 클릭이 먹지 않은 경우가 있어 한 번만 다시 누른다. 이미 저장됐다면
+    // 화면이 수정폼이 아니므로 재클릭 자체가 일어나지 않는다.
+    if (outcome.state === 'NOT_EXECUTED') {
+      const stillEditing = await waitForFrame(tabId, (state) => state.hasArrivalEditForm === true, 2000, 250);
+      if (stillEditing) {
+        const retry = await sendAction(tabId, stillEditing.frameId, 'SAVE_ARRIVAL_EDIT');
+        if (retry.ok) outcome = await waitForSaveOutcome(tabId, verifyPayload);
+      }
     }
-    const verification = { ok: true, data: verified.data };
+
+    if (outcome.state === 'REJECTED') {
+      return {
+        code: 'SAVE_REJECTED',
+        result: '입국정보 저장 실패',
+        arrivalDate: '',
+        note: 'FIMS가 저장을 거부했습니다. 화면에서 직접 확인하세요.',
+        detail: `FIMS 알림: ${outcome.message}`
+      };
+    }
+    if (outcome.state === 'NOT_EXECUTED') {
+      return {
+        code: 'SAVE_NOT_EXECUTED',
+        result: '입국정보 저장 실패',
+        arrivalDate: '',
+        note: '저장이 실행되지 않았습니다. 입국신고가 되지 않은 상태입니다.',
+        detail: '저장 버튼을 눌렀지만 FIMS의 저장 완료 알림도, 입국일자 채워짐도 확인되지 않았습니다. 두 번 시도했습니다.'
+      };
+    }
+    if (!outcome.verification) {
+      return {
+        code: 'SAVE_UNVERIFIED',
+        result: '입국정보 저장 실패',
+        arrivalDate: '',
+        note: '저장 결과를 확인하지 못했습니다.',
+        detail: '저장 알림은 확인했으나 학생 화면에서 신원을 다시 확인하지 못했습니다.'
+      };
+    }
+    const verification = { ok: true, data: outcome.verification.data };
 
     const savedStudentNo = normalizeStudentNo(verification.data?.studentNo);
     if (savedStudentNo && savedStudentNo !== normalizeStudentNo(student.studentNo)) {
@@ -794,10 +832,7 @@ async function processArrivalStudent({ tabId, student, config }) {
       throw new Error(`저장 후 입학(복학)일자가 다릅니다: ${verification.data.admissionDate}`);
     }
 
-    const pageLogs = await getDialogLogs(tabId).catch(() => []);
-    const dialogMessages = pageLogs
-      .map((item) => normalizeText(item.message))
-      .filter(Boolean);
+    const dialogMessages = (outcome.messages || []).filter(Boolean);
     const arrivalDate = formatDate(verification.data?.arrivalDate || '');
     if (arrivalDate && verification.data?.arrivalConfirmed === true) {
       return {
@@ -814,7 +849,7 @@ async function processArrivalStudent({ tabId, student, config }) {
       result: '입국일자 미확인',
       arrivalDate: '',
       note: '상세화면에 입국일자가 표시되지 않아 별도 처리 필요',
-      detail: `학번·입국·입학일자 저장은 완료됐으나 상세화면에서 날짜 (입국)을 확인하지 못했습니다.${dialogMessages.length ? ` 알림: ${dialogMessages.at(-1)}` : ''}`
+      detail: `저장 완료 알림은 확인했으나 상세화면에 입국일자가 표시되지 않았습니다(관서 출입국 기록 미연결로 보임).${dialogMessages.length ? ` 알림: ${dialogMessages.at(-1)}` : ''}`
     };
   } catch (error) {
     return {
@@ -1047,6 +1082,52 @@ async function confirmArrivalAfterRecheck(tabId, student) {
   } catch (error) {
     return { ok: false, message: error?.message || String(error) };
   }
+}
+
+// FIMS가 저장 성공 시 띄우는 알림. 이것이 있어야 '저장됨'으로 인정한다.
+function isSaveSuccessMessage(message) {
+  const text = normalizeText(message);
+  return Boolean(text && /(성공|저장되었|처리되었|완료되었|등록되었|반영되었)/.test(text));
+}
+
+// 저장 버튼을 눌렀다고 저장이 된 것이 아니다. 예전 코드는 클릭 예약만 하고
+// 저장 완료로 단정해, 실제로는 아무것도 저장되지 않은 학생을
+// '저장은 완료됐으나 입국일자 미확인'으로 기록했다(실사례: 학번·입학일자 모두 빈 상태).
+// 이제 아래 증거 중 하나가 있어야만 저장으로 인정한다.
+//   - FIMS의 저장 성공 알림
+//   - 읽기전용 입국일자(#eYmd)가 채워짐 (서버 왕복 없이는 불가능)
+// 성공이 아닌 알림이 뜨면 FIMS가 저장을 거부한 것으로 본다.
+// 예전에는 이 알림을 대화상자 브리지가 삼켜 원인을 알 수 없었다.
+async function waitForSaveOutcome(tabId, student, timeoutMs = SAVE_OUTCOME_TIMEOUT_MS) {
+  const started = Date.now();
+  let lastVerification = null;
+  while (Date.now() - started < timeoutMs) {
+    const logs = await getDialogLogs(tabId).catch(() => []);
+    const alerts = logs
+      .filter((item) => item.kind === 'alert')
+      .map((item) => normalizeText(item.message))
+      .filter(Boolean);
+    const problems = alerts.filter((message) => !isSaveSuccessMessage(message) && !isPostLoginStatusNotice(message));
+    if (problems.length) {
+      return { state: 'REJECTED', message: problems.at(-1), messages: alerts, verification: lastVerification };
+    }
+    const succeeded = alerts.some(isSaveSuccessMessage);
+
+    const frames = await inspectAll(tabId);
+    for (const frame of frames.filter((item) => item.state?.canVerifyArrival === true)) {
+      const response = await sendAction(tabId, frame.frameId, 'READ_ARRIVAL_VERIFICATION', student);
+      if (!response.ok) continue;
+      const data = response.data || {};
+      if (!identityVerified(data, student)) continue;
+      lastVerification = { frame, data };
+      if (data.arrivalConfirmed === true) {
+        return { state: 'SAVED', verification: lastVerification, messages: alerts };
+      }
+    }
+    if (succeeded) return { state: 'SAVED', verification: lastVerification, messages: alerts };
+    await sleep(400);
+  }
+  return { state: 'NOT_EXECUTED', verification: lastVerification, messages: [] };
 }
 
 async function recheckArrivalStudent({ tabId, student }) {
