@@ -434,6 +434,7 @@ async function startRun() {
     log('기존 FIMS 탭을 닫고 세션 쿠키를 지운 뒤 확장프로그램 전용 FIMS 팝업 창을 엽니다.');
     log('브라우저 자동입력 값을 지우고, 아래에 입력한 ID·비밀번호를 로그인 직전에 다시 덮어씁니다.');
     log('새 창에서 로그인 후 유학생정보관리 → 유학생기본정보로 진입합니다.');
+    log('정확성 우선으로 동작합니다. 화면이 완전히 그려진 뒤에 읽고 쓰기 때문에 학생당 시간이 조금 더 걸립니다.', 'INFO');
     const login = await command('OPEN_OR_LOGIN', { userId, password });
     state.tabId = login.tabId;
     log(login.message, 'OK');
@@ -463,7 +464,8 @@ async function startRun() {
           processedAt: nowKst()
         });
         const kind = outcome.code === 'COMPLETED' ? 'OK' : 'WARN';
-        log(`[${index + 1}/${total}] ${outcome.result}: ${student.name}${outcome.arrivalDate ? ` / ${outcome.arrivalDate}` : ''}${outcome.detail ? ` / ${outcome.detail}` : ''}`, kind);
+        const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+        log(`[${index + 1}/${total}] ${outcome.result}: ${student.name}${outcome.arrivalDate ? ` / ${outcome.arrivalDate}` : ''}${outcome.detail ? ` / ${outcome.detail}` : ''} (${elapsed}초)`, kind);
       } catch (error) {
         updateResult(student, {
           stage: '처리 중단', result: '자동화 오류', arrivalDate: '',

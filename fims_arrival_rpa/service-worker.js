@@ -11,7 +11,18 @@ const LOGIN_PAGE_SETTLE_MS = 2500;
 const LOGIN_INPUT_SETTLE_MS = 350;
 const POST_LOGIN_MENU_SETTLE_MS = 1800;
 // 저장 결과 판정 대기 시간. 테스트에서 줄여 쓴다.
-let SAVE_OUTCOME_TIMEOUT_MS = 20000;
+let SAVE_OUTCOME_TIMEOUT_MS = 30000;
+
+// ── 정확성 우선 타이밍 ──────────────────────────────────────────────────────
+// FIMS 화면은 프레임이 통째로 교체되며 값이 나중에 채워지는 경우가 많다.
+// 빨리 넘어가면 아직 그려지지 않은 화면을 읽고 '값이 없다'고 판단하게 된다.
+// 아래 값들은 속도를 조금 포기하고 오판을 줄이기 위한 것이다.
+const FRAME_SETTLE_READS = 2;        // 같은 문서를 연속 이만큼 확인해야 안정된 것으로 본다
+const DETAIL_SETTLE_MS = 800;        // 상세화면 진입 후 안정화 대기
+const EDIT_FORM_SETTLE_MS = 1200;    // 수정폼 진입 후 FIMS 초기화 스크립트 대기
+// 저장 성공 알림은 저장 요청 중에 뜨고, 입국일자가 채워진 화면은 그 뒤에 그려진다.
+// 알림을 봤다고 바로 판정하면 '저장은 됐는데 입국일자 미확인'이 잘못 찍힌다.
+let ARRIVAL_DATE_GRACE_MS = 15000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const normalizeText = (value) => String(value ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -634,16 +645,55 @@ async function waitArrivalSearchResult(tabId, student, previousDocumentToken, ti
   return { frame: last?.frame || null, data: { ...(last?.data || {}), state: 'TIMEOUT' } };
 }
 
+// 조건을 만족하는 프레임이 '같은 문서로' 연속 확인될 때까지 기다린다.
+// 화면 전환 중에는 예전 문서가 잠깐 조건을 만족할 수 있어, 한 번만 보고
+// 진행하면 아직 그려지지 않은 화면을 읽게 된다.
+async function waitForStableFrame(tabId, predicate, timeoutMs = 30000, settleMs = 0) {
+  const started = Date.now();
+  let lastToken = '';
+  let stableReads = 0;
+  let candidate = null;
+  while (Date.now() - started < timeoutMs) {
+    const frames = await inspectAll(tabId);
+    const found = frames.find((frame) => {
+      try { return predicate(frame.state || {}, frame); } catch (_) { return false; }
+    });
+    if (found) {
+      const token = String(found.state?.documentToken || found.frameId || '');
+      stableReads = token && token === lastToken ? stableReads + 1 : 1;
+      lastToken = token;
+      candidate = found;
+      if (stableReads >= FRAME_SETTLE_READS) {
+        if (settleMs > 0) await sleep(settleMs);
+        return candidate;
+      }
+    } else {
+      stableReads = 0;
+      lastToken = '';
+    }
+    await sleep(350);
+  }
+  return null;
+}
+
 async function waitForDetailFrame(tabId, timeoutMs = 30000) {
-  return waitForFrame(
+  return waitForStableFrame(
     tabId,
     (state) => state.hasStudentDetailView === true && state.hasArrivalEditForm !== true,
-    timeoutMs
+    timeoutMs,
+    DETAIL_SETTLE_MS
   );
 }
 
 async function waitForEditFrame(tabId, timeoutMs = 30000) {
-  return waitForFrame(tabId, (state) => state.hasArrivalEditForm === true, timeoutMs);
+  // 수정폼은 값이 FIMS 초기화 스크립트로 채워진다. 폼이 보이자마자 입력하면
+  // 그 스크립트가 우리 값을 덮어쓸 수 있다.
+  return waitForStableFrame(
+    tabId,
+    (state) => state.hasArrivalEditForm === true,
+    timeoutMs,
+    EDIT_FORM_SETTLE_MS
+  );
 }
 
 // 저장 직후 FIMS가 어느 화면으로 가는지는 고정되어 있지 않다.
@@ -1113,6 +1163,7 @@ function isSaveSuccessMessage(message) {
 async function waitForSaveOutcome(tabId, student, timeoutMs = SAVE_OUTCOME_TIMEOUT_MS) {
   const started = Date.now();
   let lastVerification = null;
+  let succeededAt = 0;
   while (Date.now() - started < timeoutMs) {
     const logs = await getDialogLogs(tabId).catch(() => []);
     const alerts = logs
@@ -1123,7 +1174,7 @@ async function waitForSaveOutcome(tabId, student, timeoutMs = SAVE_OUTCOME_TIMEO
     if (problems.length) {
       return { state: 'REJECTED', message: problems.at(-1), messages: alerts, verification: lastVerification };
     }
-    const succeeded = alerts.some(isSaveSuccessMessage);
+    if (alerts.some(isSaveSuccessMessage) && !succeededAt) succeededAt = Date.now();
 
     const frames = await inspectAll(tabId);
     for (const frame of frames.filter((item) => item.state?.canVerifyArrival === true)) {
@@ -1136,8 +1187,23 @@ async function waitForSaveOutcome(tabId, student, timeoutMs = SAVE_OUTCOME_TIMEO
         return { state: 'SAVED', verification: lastVerification, messages: alerts };
       }
     }
-    if (succeeded) return { state: 'SAVED', verification: lastVerification, messages: alerts };
+
+    // 성공 알림을 봤어도 바로 끝내지 않는다. 입국일자가 채워진 화면은 알림보다
+    // 늦게 그려지므로, 유예 시간 동안 계속 확인한 뒤에야 '미확인'으로 본다.
+    // 예전에는 알림을 보자마자 반환해서, 저장 전 화면을 읽고 입국일자가 없다고
+    // 판단하는 일이 잦았다.
+    if (succeededAt && Date.now() - succeededAt >= ARRIVAL_DATE_GRACE_MS) {
+      return { state: 'SAVED', verification: lastVerification, messages: alerts };
+    }
     await sleep(400);
+  }
+  if (succeededAt) {
+    const logs = await getDialogLogs(tabId).catch(() => []);
+    const alerts = logs
+      .filter((item) => item.kind === 'alert')
+      .map((item) => normalizeText(item.message))
+      .filter(Boolean);
+    return { state: 'SAVED', verification: lastVerification, messages: alerts };
   }
   return { state: 'NOT_EXECUTED', verification: lastVerification, messages: [] };
 }

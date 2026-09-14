@@ -5,7 +5,7 @@ import path from 'node:path';
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'manifest.json'), 'utf8'));
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.3.0');
+assert.equal(manifest.version, '1.3.1');
 assert.equal(manifest.name, 'FIMS 입국신고 자동화 (Excel)');
 assert.ok(!manifest.permissions.includes('debugger'), '로그인과 저장 처리에 Chrome debugger 권한을 사용하면 안 됩니다.');
 assert.ok(manifest.permissions.includes('cookies'), '새 FIMS 로그인 전에 세션 쿠키를 지울 권한이 필요합니다.');
@@ -112,6 +112,16 @@ assert.match(content, /invokePageFunction/, '페이지 함수를 직접 호출�
 assert.match(content, /lcRecomEntity/, '현지추천단체 셀렉터가 필요합니다.');
 assert.match(content, /lcRecomEntityGb/, '현지추천단체구분 셀렉터가 필요합니다.');
 assert.match(content, /applyOptionalFields/, '엑셀 선택 항목 입력 로직이 필요합니다.');
+
+// 1.3.1: 화면이 안정된 뒤에 읽고 쓴다
+assert.match(worker, /waitForStableFrame/, '프레임이 안정될 때까지 기다려야 합니다.');
+assert.match(worker, /ARRIVAL_DATE_GRACE_MS/, '저장 알림 뒤 입국일자 유예가 필요합니다.');
+assert.match(worker, /EDIT_FORM_SETTLE_MS/, '수정폼 진입 후 안정화 대기가 필요합니다.');
+assert.doesNotMatch(
+  worker,
+  /if \(succeeded\) return \{ state: 'SAVED'/,
+  '저장 알림만 보고 즉시 판정하면 입국일자를 놓칩니다.'
+);
 assert.match(xlsx, /localRecommenderType/, '엑셀에서 현지추천단체구분을 읽어야 합니다.');
 assert.doesNotMatch(
   content,

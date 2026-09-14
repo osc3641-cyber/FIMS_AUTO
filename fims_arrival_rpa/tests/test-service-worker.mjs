@@ -572,3 +572,78 @@ const recheckNoWiden = await vm.runInContext(`(async () => {
   return searches;
 })()`, context);
 assert.deepEqual([...recheckNoWiden], ['targetOnly'], '찾았으면 재조회하지 않아야 합니다.');
+
+// ── 1.3.1: 저장 성공 알림이 입국일자 확인을 가로채면 안 된다 ────────────────
+// FIMS의 "성공적으로 저장되었습니다" 알림은 저장 요청 중에 뜨고,
+// 입국일자가 채워진 화면은 그 뒤에 그려진다. 알림을 보자마자 판정하면
+// 저장 전 화면을 읽고 '입국일자 미확인'으로 잘못 기록하게 된다.
+vm.runInContext('SAVE_OUTCOME_TIMEOUT_MS = 4000; ARRIVAL_DATE_GRACE_MS = 2500;', context);
+
+const lateArrivalDate = await vm.runInContext(`(async () => {
+  waitForSaveOutcome = globalThis.__real.waitForSaveOutcome;
+  waitForArrivalVerification = globalThis.__real.waitForArrivalVerification;
+  let reads = 0;
+  ensureBasicSearchFrame = async () => ({frameId:100,state:{documentToken:'old'}});
+  waitArrivalSearchResult = async () => ({frame:{frameId:100},data:{state:'FOUND',matchCount:1}});
+  waitForDetailFrame = async () => ({frameId:101,state:{hasStudentDetailView:true}});
+  waitForEditFrame = async () => ({frameId:102,state:{hasArrivalEditForm:true}});
+  waitForFrame = async () => ({frameId:102,state:{hasArrivalEditForm:true}});
+  setDialogModeAllFrames = async () => ({armed:1,armedFrameIds:[102]});
+  clearDialogMode = async () => {};
+  // 저장 알림은 처음부터 떠 있다
+  getDialogLogs = async () => ([{kind:'alert',message:'성공적으로 저장되었습니다.[1건]'}]);
+  inspectAll = async () => ([{frameId:102,state:{canVerifyArrival:true}}]);
+  sendAction = async (_tabId, _frameId, action) => {
+    if (action === 'READ_DETAIL_IDENTITY') return {ok:true,data:{nameMatches:true,birthDateMatches:true}};
+    if (action === 'READ_ARRIVAL_VERIFICATION') {
+      reads += 1;
+      // 화면이 다시 그려지기 전에는 입국일자가 비어 있다가, 몇 번 뒤에 채워진다
+      const ready = reads >= 3;
+      return {ok:true,data:{
+        nameMatches:true,birthDateMatches:true,studentNo:'9511123456',admissionDate:'2026.09.01',
+        arrivalDate: ready ? '2026.08.24' : '',
+        arrivalMarked:false, arrivalConfirmed: ready
+      }};
+    }
+    return {ok:true};
+  };
+  const outcome = await processArrivalStudent({
+    tabId:1,
+    student:{name:'TEST STUDENT',birthDate:'2000.01.02',studentNo:'9511123456'},
+    config:{admissionDate:'2026.09.01'}
+  });
+  return {outcome, reads};
+})()`, context);
+assert.equal(lateArrivalDate.outcome.code, 'COMPLETED',
+  '입국일자가 늦게 그려져도 기다렸다가 완료로 기록해야 합니다.');
+assert.equal(lateArrivalDate.outcome.arrivalDate, '2026.08.24');
+assert.ok(lateArrivalDate.reads >= 3, '알림만 보고 즉시 끝내면 안 됩니다.');
+
+// 알림이 없으면 유예와 무관하게 저장 실패로 남는다
+vm.runInContext('SAVE_OUTCOME_TIMEOUT_MS = 700;', context);
+const stillNotExecuted = await vm.runInContext(`(async () => {
+  waitForSaveOutcome = globalThis.__real.waitForSaveOutcome;
+  ensureBasicSearchFrame = async () => ({frameId:110,state:{documentToken:'old'}});
+  waitArrivalSearchResult = async () => ({frame:{frameId:110},data:{state:'FOUND',matchCount:1}});
+  waitForDetailFrame = async () => ({frameId:111,state:{hasStudentDetailView:true}});
+  waitForEditFrame = async () => ({frameId:112,state:{hasArrivalEditForm:true}});
+  waitForFrame = async () => ({frameId:112,state:{hasArrivalEditForm:true}});
+  setDialogModeAllFrames = async () => ({armed:1,armedFrameIds:[112]});
+  clearDialogMode = async () => {};
+  getDialogLogs = async () => [];
+  inspectAll = async () => ([{frameId:112,state:{canVerifyArrival:true}}]);
+  sendAction = async (_tabId, _frameId, action) => {
+    if (action === 'READ_DETAIL_IDENTITY') return {ok:true,data:{nameMatches:true,birthDateMatches:true}};
+    if (action === 'READ_ARRIVAL_VERIFICATION') return {ok:true,data:{
+      nameMatches:true,birthDateMatches:true,studentNo:'9511123456',admissionDate:'2026.09.01',
+      arrivalDate:'',arrivalMarked:false,arrivalConfirmed:false
+    }};
+    return {ok:true};
+  };
+  return processArrivalStudent({
+    tabId:1,
+    student:{name:'TEST STUDENT',birthDate:'2000.01.02',studentNo:'9511123456'},
+    config:{admissionDate:'2026.09.01'}
+  });
+})()`, context);
+assert.equal(stillNotExecuted.code, 'SAVE_NOT_EXECUTED');
