@@ -229,6 +229,9 @@
     const noteColumn = findColumn(header.headers, ['비고', '메모']);
     const detailColumn = findColumn(header.headers, ['상세메시지', '상세']);
     const stageColumn = findColumn(header.headers, ['단계']);
+    const localRecommenderColumn = findColumn(header.headers, ['현지추천단체']);
+    const localRecommenderTypeColumn = findColumn(header.headers, ['현지추천단체구분', '현지자매학교']);
+    const lastSchoolColumn = findColumn(header.headers, ['최종출신학교']);
     const processedColumn = findColumn(header.headers, ['처리일시']);
 
     const entries = [];
@@ -249,7 +252,10 @@
         arrivalDate: arrivalColumn >= 0 ? normalizeText(row?.[arrivalColumn]) : '',
         note: noteColumn >= 0 ? normalizeText(row?.[noteColumn]) : '',
         detail: detailColumn >= 0 ? normalizeText(row?.[detailColumn]) : '',
-        processedAt: processedColumn >= 0 ? normalizeText(row?.[processedColumn]) : ''
+        processedAt: processedColumn >= 0 ? normalizeText(row?.[processedColumn]) : '',
+        localRecommender: localRecommenderColumn >= 0 ? normalizeText(row?.[localRecommenderColumn]) : '',
+        localRecommenderType: localRecommenderTypeColumn >= 0 ? normalizeText(row?.[localRecommenderTypeColumn]) : '',
+        lastSchool: lastSchoolColumn >= 0 ? normalizeText(row?.[lastSchoolColumn]) : ''
       });
     });
     return entries;
@@ -319,7 +325,12 @@
     const headerStyles = styleMap(existingDoc, 4, 10);
     const bodyStyles = styleMap(existingDoc, 5, 10);
 
-    const headers = ['순번', '성명', '생년월일', '학번', '단계', '처리결과', '확인된 입국일자', '비고', '상세메시지', '처리일시'];
+    // 처리결과에도 엑셀에 적은 입력값을 그대로 남긴다(무엇을 넣었는지 확인용).
+    const headers = [
+      '순번', '성명', '생년월일', '학번',
+      '현지추천단체구분', '현지추천단체', '최종출신학교',
+      '단계', '처리결과', '확인된 입국일자', '비고', '상세메시지', '처리일시'
+    ];
     const rows = [];
     rows.push(`<row r="1" ht="28" customHeight="1">${inlineCell(1, 0, 'FIMS 입국신고 처리결과', titleStyles[0])}</row>`);
     rows.push(`<row r="2" ht="20" customHeight="1">${inlineCell(2, 0, `생성일시: ${new Date().toLocaleString('ko-KR')}`, noteStyles[0])}</row>`);
@@ -332,6 +343,9 @@
         result.name ?? '',
         result.birthDate ?? '',
         result.studentNo ?? '',
+        result.localRecommenderType ?? '',
+        result.localRecommender ?? '',
+        result.lastSchool ?? '',
         result.stage ?? '',
         result.result ?? '',
         result.arrivalDate ?? '',
@@ -345,7 +359,7 @@
     const lastRow = Math.max(4, results.length + 4);
     const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <dimension ref="A1:J${lastRow}"/>
+  <dimension ref="A1:M${lastRow}"/>
   <sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A5" sqref="A5"/></sheetView></sheetViews>
   <sheetFormatPr defaultRowHeight="18"/>
   <cols>
@@ -353,16 +367,19 @@
     <col min="2" max="2" width="28" customWidth="1"/>
     <col min="3" max="3" width="16" customWidth="1"/>
     <col min="4" max="4" width="16" customWidth="1"/>
-    <col min="5" max="5" width="20" customWidth="1"/>
-    <col min="6" max="6" width="24" customWidth="1"/>
-    <col min="7" max="7" width="20" customWidth="1"/>
-    <col min="8" max="8" width="35" customWidth="1"/>
-    <col min="9" max="9" width="62" customWidth="1"/>
-    <col min="10" max="10" width="22" customWidth="1"/>
+    <col min="5" max="5" width="22" customWidth="1"/>
+    <col min="6" max="6" width="30" customWidth="1"/>
+    <col min="7" max="7" width="30" customWidth="1"/>
+    <col min="8" max="8" width="20" customWidth="1"/>
+    <col min="9" max="9" width="24" customWidth="1"/>
+    <col min="10" max="10" width="20" customWidth="1"/>
+    <col min="11" max="11" width="35" customWidth="1"/>
+    <col min="12" max="12" width="62" customWidth="1"/>
+    <col min="13" max="13" width="22" customWidth="1"/>
   </cols>
   <sheetData>${rows.join('')}</sheetData>
-  <autoFilter ref="A4:J${lastRow}"/>
-  <mergeCells count="2"><mergeCell ref="A1:J1"/><mergeCell ref="A2:J2"/></mergeCells>
+  <autoFilter ref="A4:M${lastRow}"/>
+  <mergeCells count="2"><mergeCell ref="A1:M1"/><mergeCell ref="A2:M2"/></mergeCells>
   <pageMargins left="0.3" right="0.3" top="0.5" bottom="0.5" header="0.2" footer="0.2"/>
 </worksheet>`;
 

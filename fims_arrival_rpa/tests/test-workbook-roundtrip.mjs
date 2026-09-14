@@ -115,10 +115,10 @@ const cells = [
   ['B5', 'SAMPLE LONGNAME TESTCASE OVERFLOW ALPHA'],
   ['C5', '20000102'],
   ['D5', '0951112345'],
-  ['E5', '왕복 테스트'],
+  ['E5', '현지자매학교추천'],
   ['F5', '-'],
-  ['G5', '현지자매학교추천'],
-  ['H5', 'Sample University']
+  ['G5', 'Sample University'],
+  ['H5', '왕복 테스트']
 ].map(([ref, value]) => `<${ns}c r="${ref}" t="inlineStr"><${ns}is><${ns}t>${value}</${ns}t></${ns}is></${ns}c>`).join('');
 sheetXml = sheetXml.replace(
   new RegExp(`<${ns}row r="5"[^>]*>[\\s\\S]*?</${ns}row>`),
@@ -147,6 +147,9 @@ const resultBlob = await FimsXlsx.exportResults(parsed.originalBytes, [{
   name: parsed.students[0].name,
   birthDate: parsed.students[0].birthDate,
   studentNo: parsed.students[0].studentNo,
+  localRecommenderType: parsed.students[0].localRecommenderType,
+  localRecommender: parsed.students[0].localRecommender,
+  lastSchool: parsed.students[0].lastSchool,
   stage: '저장 후 검증',
   result: '입국신고 완료',
   arrivalDate: '2026.08.24',
@@ -156,8 +159,13 @@ const resultBlob = await FimsXlsx.exportResults(parsed.originalBytes, [{
 }]);
 const outputZip = await JSZip.loadAsync(await resultBlob.arrayBuffer());
 const resultXml = await outputZip.file('xl/worksheets/sheet3.xml').async('text');
+assert.match(resultXml, /Sample University/);
 assert.match(resultXml, /확인된 입국일자/);
 assert.match(resultXml, /입국신고 완료/);
+// 처리결과에도 엑셀 입력값 열이 있어야 한다
+for (const header of ['현지추천단체구분', '현지추천단체', '최종출신학교']) {
+  assert.ok(resultXml.includes(header), `처리결과에 ${header} 열이 필요합니다.`);
+}
 assert.match(resultXml, /2026\.08\.24/);
 assert.match(resultXml, /2026\.08\.24 \(입국\) 확인/);
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FIMS 입국신고 자동화 (Excel)",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "엑셀 명단으로 유학생 기본정보를 조회하고 학번·입국여부·입학일자를 저장한 뒤 입국일자를 검증합니다.",
   "minimum_chrome_version": "111",
   "permissions": [

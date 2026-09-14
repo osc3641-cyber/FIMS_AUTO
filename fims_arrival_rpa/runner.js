@@ -138,7 +138,7 @@ function renderResults() {
   if (!state.results.length) {
     const row = document.createElement('tr');
     const cell = document.createElement('td');
-    cell.colSpan = 10;
+    cell.colSpan = 13;
     cell.className = 'empty';
     cell.textContent = '엑셀 파일을 불러오면 대상자가 표시됩니다.';
     row.appendChild(cell);
@@ -151,13 +151,14 @@ function renderResults() {
     const row = document.createElement('tr');
     const values = [
       result.sequence, result.name, result.birthDate, result.studentNo,
+      result.localRecommenderType, result.localRecommender, result.lastSchool,
       result.stage, result.result, result.arrivalDate, result.note,
       result.detail, result.processedAt
     ];
     values.forEach((value, index) => {
       const cell = document.createElement('td');
       cell.textContent = value ?? '';
-      if (index === 5) cell.className = resultClass(String(value || ''));
+      if (index === 8) cell.className = resultClass(String(value || ''));
       row.appendChild(cell);
     });
     elements.resultsBody.appendChild(row);
@@ -198,6 +199,10 @@ function initializeResults(students, priorResults = []) {
       name: student.name,
       birthDate: student.birthDate,
       studentNo: student.studentNo,
+      // 파일 검사 단계부터 엑셀에 적은 값을 그대로 보여준다.
+      localRecommenderType: student.localRecommenderType || '',
+      localRecommender: student.localRecommender || '',
+      lastSchool: student.lastSchool || '',
       stage: '대기',
       result: '대기',
       arrivalDate: '',
@@ -213,6 +218,9 @@ function initializeResults(students, priorResults = []) {
       stage: previous.stage || base.stage,
       result: previous.result || base.result,
       arrivalDate: previous.arrivalDate || '',
+      localRecommenderType: previous.localRecommenderType || base.localRecommenderType,
+      localRecommender: previous.localRecommender || base.localRecommender,
+      lastSchool: previous.lastSchool || base.lastSchool,
       note: previous.note || base.note,
       detail: previous.detail || '',
       processedAt: previous.processedAt || ''
@@ -288,7 +296,10 @@ async function runRecheck() {
         sequence: target.sequence,
         name: target.name,
         birthDate: target.birthDate,
-        studentNo: target.studentNo
+        studentNo: target.studentNo,
+        localRecommenderType: target.localRecommenderType || '',
+        localRecommender: target.localRecommender || '',
+        lastSchool: target.lastSchool || ''
       };
       setBadge(`별도처리 ${index + 1}/${total}`, 'running');
       log(`[별도처리 ${index + 1}/${total}] ${target.name} / ${target.birthDate} / ${target.studentNo}`);
@@ -448,6 +459,7 @@ async function startRun() {
         note: student.note || '', detail: '', processedAt: nowKst()
       });
       log(`[${index + 1}/${total}] ${student.name} / ${student.birthDate} / ${student.studentNo} 조회`);
+      const startedAt = Date.now();
       try {
         const outcome = await command('PROCESS_STUDENT', {
           tabId: state.tabId,

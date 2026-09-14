@@ -5,7 +5,7 @@ import path from 'node:path';
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'manifest.json'), 'utf8'));
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.3.1');
+assert.equal(manifest.version, '1.3.2');
 assert.equal(manifest.name, 'FIMS 입국신고 자동화 (Excel)');
 assert.ok(!manifest.permissions.includes('debugger'), '로그인과 저장 처리에 Chrome debugger 권한을 사용하면 안 됩니다.');
 assert.ok(manifest.permissions.includes('cookies'), '새 FIMS 로그인 전에 세션 쿠키를 지울 권한이 필요합니다.');
@@ -82,6 +82,14 @@ assert.match(content, /fncSearchIntlStudInfo/, '수정대상자 조회 버튼 �
 assert.match(content, /applyIcrmUpdate/, '팝업 수정 적용 함수가 필요합니다.');
 assert.match(runner, /RECHECK_ARRIVAL/, '실행 화면에 별도처리 실행 경로가 있어야 합니다.');
 assert.match(runner, /recheckTargets/, '별도처리 대상 선별 로직이 필요합니다.');
+
+// 1.3.2: 소요 시간 로그의 변수 선언이 빠지면 학생 처리가 통째로 실패한다
+assert.match(runner, /const startedAt = Date\.now\(\)/, '소요 시간 기준 시각 선언이 필요합니다.');
+assert.match(runner, /Date\.now\(\) - startedAt/, '소요 시간 계산이 필요합니다.');
+// 처리결과 표/엑셀에 엑셀 입력값이 그대로 실려야 한다
+assert.match(runnerHtml, /현지추천단체구분/, '처리결과 표에 열이 있어야 합니다.');
+assert.match(runner, /result\.localRecommenderType/, '처리결과 표에 값을 채워야 합니다.');
+assert.match(xlsx, /result\.localRecommenderType/, '처리결과 엑셀에 값을 써야 합니다.');
 assert.match(xlsx, /parsePriorResults/, '처리결과 탭을 다시 읽을 수 있어야 합니다.');
 
 // 1.1.1: 저장은 증거가 있을 때만 '완료'로 인정한다
